@@ -44,7 +44,7 @@ echo "########################################################"
 cmake -B${build_dir} \
       -DROBOTIC_PROJECT_DIR="${robotic_project_dir}" \
       -DPLATFORM="${platform}" \
-      -DCMAKE_TOOLCHAIN_FILE=../../../toolchain/Toolchain_aarch64_l4t.cmake
+      -DCMAKE_TOOLCHAIN_FILE=/home/fuzhou/svn/toolchain-arm/Toolchain_aarch64_l4t.cmake
 
 cd ${build_dir}
 make -j8
