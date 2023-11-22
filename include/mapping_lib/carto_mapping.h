@@ -129,6 +129,7 @@ class CartoMapping : public MappingInterface {
   std::mutex paint_mutex_;
   std::mutex stop_mapping_mtx_;
   std::condition_variable stop_mapping_cond_;
+  std::condition_variable data_cv_;
 
   // 传感器数据从文件中读完的标志位，保证读完才能进行下一步
   bool read_radar_finish_ = true;
