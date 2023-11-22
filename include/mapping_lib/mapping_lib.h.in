@@ -1,0 +1,10 @@
+#ifndef __SCM_VERSION_H__
+#define __SCM_VERSION_H__
+------------------------------------------------------------------------
+r1121 | fuzhou | 2023-03-31 11:27:16 +0800 (Fri, 31 Mar 2023) | 1 line
+Changed paths:
+   M /branch-refactor/plugins/mapping_and_location_1.1/src/mapping_and_location_impl.cc
+
+修复之前对读取初始位姿的校验没有生效的问题
+------------------------------------------------------------------------
+#endif
