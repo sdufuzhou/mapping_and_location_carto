@@ -1,7 +1,6 @@
 #pragma once
 #include <assert.h>
 #include <jsoncpp/json/json.h>
-#include <pthread.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -86,6 +85,9 @@ class CartoMapping : public MappingInterface {
   static void *HandleImu(void *ptr);    // 处理Imu数据,
 
   void HandleTimeQueue();  //代替上面三个函数
+  void FinishMapping();    // 结束建图函数
+  void StopAndOptimize();
+  void PaintMap();
 
   // 三个保存离线数据的函数
   void SaveLaserDataToFile(RadarSensoryMessage &data);
@@ -99,10 +101,6 @@ class CartoMapping : public MappingInterface {
 
   //分割字符串函数
   std::vector<std::string> SplitCString(std::string &str, std::string delimit);
-
-  // 结束建图函数
-  void FinishMapping();
-
   // 数据格式转换并添加数据函数
   void OdomDataConversionAndAddFunc(Position &pose);
   void ImuDataConversionAndAddFunc(ImuSensoryMessage &data);
@@ -114,9 +112,6 @@ class CartoMapping : public MappingInterface {
   cartographer::sensor::ImuData ToCartoImu(ImuSensoryMessage &data);
   cartographer::common::Time ToCartoTime(uint64_t timestamp_us);
 
-  void StopAndOptimize();
-  void PaintMap();
-
   CartoMappingConfig config_;
 
   // 建图接口MapBuilder，智能指针的声明（空指针）
@@ -125,34 +120,25 @@ class CartoMapping : public MappingInterface {
   // 路径接口指针TrajectoryBuilder，普通指针（空指针）
   cartographer::mapping::TrajectoryBuilderInterface *trajectory_builder_;
 
-  // 空指针，后面还需要进行初始化，才能通过指针进行调用
-  cartographer::mapping::proto::MapBuilderOptions
-      *map_builder_options_;  // MapBuilder参数，采用指针的方式
-
-  pthread_t handle_radar_thread_;
-  pthread_t handle_odom_thread_;
-  pthread_t handle_imu_thread_;
-  pthread_t finish_mapping_thread_;
-
   // 对数据列表操作时，加互斥锁，防止之间相互干扰
   // 换成std::mutex锁
   std::mutex time_queue_mtx_;
   std::mutex raw_lidar_list_mtx_;
   std::mutex raw_odom_list_mtx_;
   std::mutex raw_imu_list_mtx_;
-  std::mutex paint_mutex;
-
-  pthread_mutex_t mutex_ridar_list;
-  pthread_mutex_t mutex_odom_list;
+  std::mutex paint_mutex_;
+  std::mutex stop_mapping_mtx_;
+  std::condition_variable stop_mapping_cond_;
 
   // 传感器数据从文件中读完的标志位，保证读完才能进行下一步
   bool read_radar_finish_ = true;
   bool read_odom_finish_ = true;
   bool read_imu_finish_ = true;
 
-  long latest_radar_timestamp = -1;
-  long latest_odom_timestamp = -1;
-  long latest_imu_timestamp = -1;
+  uint64_t latest_radar_timestamp_ = 0;
+  uint64_t latest_odom_timestamp = 0;
+  uint64_t latest_imu_timestamp_ = 0;
+  uint64_t last_data_time_ = 0;
 
   bool first_laser_ = true;
   float laser_min_angle_;
@@ -165,9 +151,6 @@ class CartoMapping : public MappingInterface {
 
   int stepIncreament_ = 1;  // 倍数关系
   bool add_data_;
-
-  uint64_t last_data_time_ = 0;
-  uint64_t last_time = 0;
 
   // 三个结束处理数据（包括在线和离线）的标志位
   bool handle_radar_finish_ = true;
@@ -187,29 +170,28 @@ class CartoMapping : public MappingInterface {
   FILE *ImuDataFile_;
 
   // 创建三个缓存各种类型传感器数据的list容器
-  std::list<RadarSensoryMessage> m_RidarList;  // List容器针对频繁存取的操作
-  std::list<ImuSensoryMessage> m_ImuList;
-  std::list<OdometerMessage> m_OdomList;
+  std::list<RadarSensoryMessage> lidar_list_;  // List容器针对频繁存取的操作
+  std::list<ImuSensoryMessage> imu_lists_;
+  std::list<OdometerMessage> odom_list_;
 
   // 创建两个在读数据线程中存储从文件中读到的传感器数据的list容器
-  std::list<RadarSensoryMessage> m_RidarList_inRead;
-  std::list<Position> m_OdomList_inRead;
+  std::list<RadarSensoryMessage> lidar_list_from_file_;
+  std::list<Position> odom_list_from_file_;
 
   // 创建一个存储各种传感器类型及时间戳的队列
-  std::map<uint64_t, SensorType> time_queue;
+  std::map<uint64_t, SensorType> time_queue_;
 
-  int trajectory_id;
-  bool offline_mapping;
-  bool use_laser_based;
-  bool use_imu_based;  // Carto里 有是否使用IMU的选择
-  bool use_odom_based;
-  Position m_MappingOdom;  // 建图里程计,只需要维持这一个
-  std::string map_name_;   // 地图名
+  int trajectory_id_;
+  bool offline_mapping_;
+  bool use_laser_;
+  bool use_imu_;  // Carto里 有是否使用IMU的选择
+  bool use_odom_;
+  std::string map_name_;  // 地图名
 
   // 三个记录数据量的索引
-  int record_index_radar = 0;
-  int record_index_odom = 0;
-  int record_index_imu = 0;
+  int record_index_radar_ = 0;
+  int record_index_odom_ = 0;
+  int record_index_imu_ = 0;
 };
 
 }  // namespace mapping_and_location

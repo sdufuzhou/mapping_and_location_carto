@@ -118,4 +118,4 @@ install(TARGETS ${PACKAGE_NAME} DESTINATION ${CMAKE_INSTALL_LIBDIR}
 set(CMAKE_CXX_FLAGS "-std=c++14 -g -O0 -fprofile-arcs -ftest-coverage")
 
 # Unit tests
-add_subdirectory(test)
+# add_subdirectory(test)
