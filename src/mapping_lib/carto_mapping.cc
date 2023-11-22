@@ -206,30 +206,29 @@ void CartoMapping::HandleLaserData(const RadarSensoryMessage &data) {
         laser_max_range_);
   }
   if (add_data_) {
-    std::unique_lock<std::mutex> lidar_locker(raw_lidar_list_mtx_);
+    std::unique_lock<std::mutex> lidar_locker(time_queue_mtx_);
     lidar_list_.push_back(data);
     lidar_locker.unlock();
     time_queue_.insert(
         std::make_pair(data.mstruRadarMessage.mstruRadarHeaderData.mlTimeStamp,
                        SensorType::Lidar));
-  }
-  if (offline_mapping_) {
+    data_cv_.notify_all();
   }
 }
 void CartoMapping::HandleOdomData(const OdometerMessage &data) {
   if (add_data_ && use_odom_) {
-    std::unique_lock<std::mutex> lock(raw_odom_list_mtx_);
+    std::unique_lock<std::mutex> lock(time_queue_mtx_);
     time_queue_.insert(
         std::make_pair(data.mclDeltaPosition.mlTimestamp, SensorType::Odom));
     odom_list_.push_back(data);
-    lock.unlock();
+    data_cv_.notify_all();
   }
 }
 void CartoMapping::HandleImuData(const ImuSensoryMessage &data) {
   if (add_data_ && use_imu_) {
-    std::unique_lock<std::mutex> locker(raw_lidar_list_mtx_);
+    std::unique_lock<std::mutex> locker(time_queue_mtx_);
     imu_lists_.push_back(data);
-    locker.unlock();
+    data_cv_.notify_all();
   }
 }
 
@@ -273,16 +272,15 @@ void CartoMapping::HandleTimeQueue() {
   record_index_imu_ = 0;
 
   // 上锁
-  std::unique_lock<std::mutex> time_locker(time_queue_mtx_);
+  std::unique_lock<std::mutex> locker(time_queue_mtx_);
   while (!time_queue_.empty() || add_data_) {
+    data_cv_.wait(locker, [this] { return !time_queue.empty(); });
     auto time_item = *time_queue_.begin();
     time_queue_.erase(time_queue_.begin());
-    time_locker.unlock();
     if (time_item.second == SensorType::Lidar) {
-      std::unique_lock<std::mutex> lidar_locker(raw_lidar_list_mtx_);
       RadarSensoryMessage laser_data = lidar_list_.front();
       lidar_list_.pop_front();
-      lidar_locker.unlock();
+      time_locker.unlock();
       if (!offline_mapping_) {
         LaserDataConversionAndAddFunc(laser_data);
       } else {
@@ -290,10 +288,9 @@ void CartoMapping::HandleTimeQueue() {
         SaveLaserDataToFile(laser_data);
       }
     } else if (time_item.second == SensorType::Odom) {
-      std::unique_lock<std::mutex> odom_locker(raw_odom_list_mtx_);
       OdometerMessage odom_data = odom_list_.front();
       odom_list_.pop_front();
-      odom_locker.unlock();
+      time_locker.unlock();
       // 构建轮式里程计在tracking_frame下的位姿所对应的变换矩阵
       Eigen::Matrix3d transformation_matrix_wheel;
       float x = config_.wheel_odom_position_x;
@@ -330,11 +327,10 @@ void CartoMapping::HandleTimeQueue() {
       }
     } else {
       // imu枷锁
-      std::unique_lock<std::mutex> imu_locker(raw_imu_list_mtx_);
       ImuSensoryMessage imu_data = imu_lists_.front();
       imu_lists_.pop_front();
       // imu解锁
-      imu_locker.unlock();
+      time_locker.unlock();
       if (!offline_mapping_) {
         // std::thread th(
         //     std::bind(&CartoMapping::ImuDataConversionAndAddFunc,this,
