@@ -129,9 +129,6 @@ class CartoMapping : public MappingInterface {
   cartographer::mapping::proto::MapBuilderOptions
       *map_builder_options_;  // MapBuilder参数，采用指针的方式
 
-
-      
-
   pthread_t handle_radar_thread_;
   pthread_t handle_odom_thread_;
   pthread_t handle_imu_thread_;
