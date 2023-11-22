@@ -965,11 +965,11 @@ namespace gomros
       void CartoMapping::CreatCartoModule()
       {
         // 传入的config_在构造函数中已经赋值，这里是两个函数的调用。
-        auto map_builder__options_ = GetMapBuilderOptions(config_);
-        auto trajectory_builder_options_ = GetTrajectoryBuilderOptions(config_);
+        auto map_builder_options = GetMapBuilderOptions(config_);
+        auto trajectory_builder_options = GetTrajectoryBuilderOptions(config_);
         // 创建map_builder_
         map_builder_ = absl::make_unique<cartographer::mapping::MapBuilder>(
-            map_builder__options_);
+            map_builder_options);
         // 创建trajectory
         using SensorId = cartographer::mapping::TrajectoryBuilderInterface::SensorId;
         using SensorType = SensorId::SensorType;
@@ -989,7 +989,7 @@ namespace gomros
           SLAM_DEBUG("###############使用odom传感器\n");
         }
         trajectory_id = map_builder_->AddTrajectoryBuilder(
-            sensor_ids, trajectory_builder_options_,
+            sensor_ids, trajectory_builder_options,
             [this](const int trajectory_id, const ::cartographer::common::Time time,
                    const cartographer::transform::Rigid3d local_pose,
                    cartographer::sensor::RangeData range_data_in_local,
