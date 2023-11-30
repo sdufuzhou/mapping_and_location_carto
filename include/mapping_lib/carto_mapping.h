@@ -79,11 +79,6 @@ class CartoMapping : public MappingInterface {
  private:
   void CreatCartoModule();
 
-  // 三个处理数据的线程函数（静态成员函数，不能直接访问非静态成员变量和函数）
-  static void *HandleLaser(void *ptr);  // 处理雷达数据
-  static void *HandleOdom(void *ptr);   // 处理里程计数据
-  static void *HandleImu(void *ptr);    // 处理Imu数据,
-
   void HandleTimeQueue();  //代替上面三个函数
   void FinishMapping();    // 结束建图函数
   void StopAndOptimize();
@@ -178,6 +173,7 @@ class CartoMapping : public MappingInterface {
   // 创建两个在读数据线程中存储从文件中读到的传感器数据的list容器
   std::list<RadarSensoryMessage> lidar_list_from_file_;
   std::list<Position> odom_list_from_file_;
+  std::list<ImuSensoryMessage> imu_list_from_file_;
 
   // 创建一个存储各种传感器类型及时间戳的队列
   std::map<uint64_t, SensorType> time_queue_;

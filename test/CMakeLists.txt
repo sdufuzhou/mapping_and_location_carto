@@ -1,11 +1,6 @@
 # 动态库单元测试设置
 set(LIB_TEST_NAME mapping_location_test)
 
-# add_executable(${LIB_TEST_NAME}
-#   ${PLUGIN_SRC}
-#   ${ALL_TEST}
-#   test_main.cc
-# )
 set(BOOST_COMPONENTS iostreams)
 find_package(Boost REQUIRED COMPONENTS ${BOOST_COMPONENTS})
 # find_package(GLog REQUIRED)
@@ -27,17 +22,20 @@ include_directories(
 )
 set(CMAKE_CXX_FLAGS "-std=c++14 -g -O0 -fprofile-arcs -ftest-coverage")
 
-add_executable(main
-${PLUGIN_SRC}
-  main.cpp
+# add_executable(main
+# ${PLUGIN_SRC}
+#   main.cpp
+# )
+add_executable(${LIB_TEST_NAME}
+  ${PLUGIN_SRC}
+  ${ALL_TEST}
+  test_main.cc
 )
 
 set(PREBUILT_DIR ${ROBOTIC_PROJECT_DIR}/prebuilt/lib_so)
 
-target_link_libraries(main
-# link_libraries(
+target_link_libraries(${LIB_TEST_NAME}
     ${GLOG_LIBRARIES}
-    # glog
     ${PCL_LIBRARIES} 
     ${CERES_LIBRARIES} 
     ${EIGEN3_LIBRARIES}
@@ -63,13 +61,12 @@ target_link_libraries(main
     absl::utility 
     ${PREBUILT_DIR}/libagv_config_lib.so
     ${PREBUILT_DIR}/libcommon_lib.so
-    # ${PREBUILT_DIR}/libmapping_and_location.so
 )
 
-# gtest_discover_tests(${LIB_TEST_NAME}
-#   WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-#   -lglog
-#   -lgcov 
-#   -lz
-#   -pthread
-# )
+gtest_discover_tests(${LIB_TEST_NAME}
+  WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+  -lglog
+  -lgcov 
+  -lz
+  -pthread
+)

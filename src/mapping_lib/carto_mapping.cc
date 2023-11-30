@@ -54,9 +54,6 @@ void CartoMapping::StartMapping() {
   th.detach();
 }
 void CartoMapping::StopMapping(std::string map_name) {
-  // 更新标志位
-
-  add_data_ = false;  // 此时也不再往list容器中添加数据了
   // 设置地图名称为给定的 map_name
   map_name_ = map_name;
   // 离线和在线都要用到的线程
@@ -65,10 +62,14 @@ void CartoMapping::StopMapping(std::string map_name) {
 }
 void CartoMapping::FinishMapping() {
   // SLAM_DEBUG("等待结束建图\n");
+  uint64_t t1 = gomros::common::GetCurrentTime_us();
+  std::unique_lock<std::mutex> locker(time_queue_mtx_);
+  add_data_ = false;  // 此时也不再往list容器中添加数据了
+  data_cv_.notify_all();
+  locker.unlock();
   std::unique_lock<std::mutex> lck(stop_mapping_mtx_);
   stop_mapping_cond_.wait(lck, [this] { return handle_radar_finish_; });
   lck.unlock();
-  SLAM_DEBUG("开始结束建图\n");
   // 同时整个while循环，又阻塞程序的向下运行，直到各种传感器数据都处理结束才会往下运行
   if (offline_mapping_) {
     CreatCartoModule();
@@ -86,60 +87,62 @@ void CartoMapping::FinishMapping() {
     }
     usleep(1000000);
     SLAM_DEBUG("数据从文件读取完毕\n");
-    SLAM_DEBUG("odom zise %d,radar size %d\n", odom_list_from_file_.size(),
-               lidar_list_from_file_.size());
 
-    while (!odom_list_from_file_.empty() || !lidar_list_from_file_.empty()) {
-      if (!odom_list_from_file_.empty() && !lidar_list_from_file_.empty()) {
-        if (odom_list_from_file_.front().mlTimestamp <=
+    while (!odom_list_from_file_.empty() || !lidar_list_from_file_.empty() ||
+           !imu_list_from_file_.empty()) {
+      uint64_t min_time = std::numeric_limits<uint64_t>::max();
+      int sensor_type = 0;
+      if (!odom_list_from_file_.empty()) {
+        if (min_time > odom_list_from_file_.front().mlTimestamp) {
+          min_time = odom_list_from_file_.front().mlTimestamp;
+          sensor_type = 1;
+        }
+      }
+      if (!lidar_list_from_file_.empty()) {
+        if (min_time >
             lidar_list_from_file_.front()
                 .mstruRadarMessage.mstruRadarHeaderData.mlTimeStamp) {
-          SLAM_WARN("添加一帧里程计数据\n");
-          // std::thread
-          // th(std::bind(&CartoMapping::OdomDataConversionAndAddFunc,
-          //                          this, odom_list_from_file_.front()));
-          // th.join();
+          min_time = lidar_list_from_file_.front()
+                         .mstruRadarMessage.mstruRadarHeaderData.mlTimeStamp;
+          sensor_type = 2;
+        }
+      }
+      if (!imu_list_from_file_.empty()) {
+        uint64_t imu_time = (uint64_t)imu_list_from_file_.front().time_stamp;
+        if (min_time > imu_time) {
+          min_time = imu_time;
+          sensor_type = 3;
+        }
+      }
+      switch (sensor_type) {
+        case 1:
           OdomDataConversionAndAddFunc(odom_list_from_file_.front());
           odom_list_from_file_.pop_front();
-          LOG_WARN << "剩余" << odom_list_from_file_.size() << "帧里程计数据";
-        } else {
-          SLAM_WARN("添加一帧雷达数据\n");
-          // std::thread
-          // th(std::bind(&CartoMapping::LaserDataConversionAndAddFunc,
-          //                          this, lidar_list_from_file_.front()));
-          // th.join();
+          break;
+        case 2:
+          // radar_count++;
           LaserDataConversionAndAddFunc(lidar_list_from_file_.front());
           lidar_list_from_file_.pop_front();
-          LOG_WARN << "剩余" << lidar_list_from_file_.size() << "帧雷达数据";
-        }
-      } else if (!odom_list_from_file_.empty()) {
-        SLAM_WARN("添加一帧里程计数据\n");
-        // std::thread th(std::bind(&CartoMapping::OdomDataConversionAndAddFunc,
-        //                          this, odom_list_from_file_.front()));
-        // th.join();
-        OdomDataConversionAndAddFunc(odom_list_from_file_.front());
-        odom_list_from_file_.pop_front();
-        LOG_WARN << "剩余" << odom_list_from_file_.size() << "帧里程计数据";
-      } else if (!lidar_list_from_file_.empty()) {
-        SLAM_WARN("添加一帧雷达数据\n");
-        // std::thread
-        // th(std::bind(&CartoMapping::LaserDataConversionAndAddFunc,
-        //                          this, lidar_list_from_file_.front()));
-        // th.join();
-        LaserDataConversionAndAddFunc(lidar_list_from_file_.front());
-        lidar_list_from_file_.pop_front();
-        LOG_WARN << "剩余" << lidar_list_from_file_.size() << "帧雷达数据";
+          break;
+        case 3:
+          ImuDataConversionAndAddFunc(imu_list_from_file_.front());
+          imu_list_from_file_.pop_front();
+          break;
+        default:
+          LOG_ERROR << "数据类型错误";
+          return;
       }
-      // usleep(100000);
     }
   }
   sleep(2);  // 不影响在线
   StopAndOptimize();
-  usleep(3000000);
   PaintMap();
   finish_mapping_ = true;
   lidar_list_from_file_.clear();
   odom_list_from_file_.clear();
+  imu_list_from_file_.clear();
+  uint64_t t2 = gomros::common::GetCurrentTime_us();
+  SLAM_DEBUG("cartographer_gomros建图总耗时:%f\n", (t2 - t1) / 1000000.0);
   SLAM_DEBUG("结束FinishMapping线程函数\n");
 }
 
@@ -165,18 +168,12 @@ void CartoMapping::HandleLaserData(const RadarSensoryMessage &data) {
       SLAM_ERROR("建图模块配置文件角度分辨率小于雷达数据分辨率\n");
     }
     if (fabs(float_stepIncreament - stepIncreament_) > 1e-4) {
-      // laser_resolution_ = angle_increment_ * stepIncreament_;
-      stepIncreament_ = 1;
-      laser_resolution_ = angle_increment_;
+      laser_resolution_ = angle_increment_ * stepIncreament_;
       SLAM_WARN(
-          "建图模块配置文件角度分辨率必须是雷达数据分辨率整数倍,实际为%f, "
-          "取整之后为%d, 使用雷达原始分辨率!!!!!!!!!!!!!!\n",
-          float_stepIncreament, stepIncreament_);
+          "建图模块配置文件角度分辨率必须是雷达数据分辨率整数倍,实际倍数为%f, "
+          "取整之后为%d, 使用雷达分辨率为!!!!!!!!!!!!!!\n",
+          float_stepIncreament, stepIncreament_, laser_resolution_);
     }
-    SLAM_DEBUG("mstruRadarHeaderData.mfAngleMin max :%f %f",
-               data.mstruRadarMessage.mstruRadarHeaderData.mfAngleMin,
-               data.mstruRadarMessage.mstruRadarHeaderData.mfAngleMax);
-
     if (laser_min_angle_ <
         data.mstruRadarMessage.mstruRadarHeaderData.mfAngleMin) {
       laser_min_angle_ = data.mstruRadarMessage.mstruRadarHeaderData.mfAngleMin;
@@ -227,6 +224,8 @@ void CartoMapping::HandleOdomData(const OdometerMessage &data) {
 void CartoMapping::HandleImuData(const ImuSensoryMessage &data) {
   if (add_data_ && use_imu_) {
     std::unique_lock<std::mutex> locker(time_queue_mtx_);
+    uint64_t time = (uint64_t)data.time_stamp;
+    time_queue_.insert(std::make_pair(time, SensorType::Imu));
     imu_lists_.push_back(data);
     data_cv_.notify_all();
   }
@@ -245,17 +244,18 @@ void CartoMapping::HandleTimeQueue() {
   RadarDataFile_ = fopen("./data/laser_data.rawmap", "w+");
   usleep(1000);
   radar_file_open_ = true;
-  std::unique_lock<std::mutex> locker(stop_mapping_mtx_);
-  handle_radar_finish_ = false;
-  locker.unlock();
-
+  {
+    std::unique_lock<std::mutex> locker(stop_mapping_mtx_);
+    handle_radar_finish_ = false;
+    locker.unlock();
+  }
   // 创建odom离线存储数据文件
   std::ofstream ofs_odom("./data/odom_data.rawmap");
   ofs_odom << str;
   ofs_odom.close();
   OdomDataFile_ = fopen("./data/odom_data.rawmap", "w+");
   usleep(1500000);
-  Position Wheel_Odom;
+  Position wheel_odom;
   odom_file_open_ = true;
   handle_odom_finish_ = false;
 
@@ -264,17 +264,23 @@ void CartoMapping::HandleTimeQueue() {
   ofs_imu << str;
   ofs_imu.close();
   ImuDataFile_ = fopen("./data/imu_data.rawmap", "w+");
-  usleep(1500000);
+  usleep(1000);
   imu_file_open_ = true;
   handle_imu_finish_ = false;
+
   record_index_radar_ = 0;
   record_index_odom_ = 0;
   record_index_imu_ = 0;
 
   // 上锁
-  std::unique_lock<std::mutex> locker(time_queue_mtx_);
+  std::unique_lock<std::mutex> time_locker(time_queue_mtx_);
   while (!time_queue_.empty() || add_data_) {
-    data_cv_.wait(locker, [this] { return !time_queue.empty(); });
+    data_cv_.wait(time_locker,
+                  [this] { return !time_queue_.empty() || !add_data_; });
+    if (time_queue_.empty()) {
+      time_locker.unlock();
+      continue;
+    }
     auto time_item = *time_queue_.begin();
     time_queue_.erase(time_queue_.begin());
     if (time_item.second == SensorType::Lidar) {
@@ -291,36 +297,20 @@ void CartoMapping::HandleTimeQueue() {
       OdometerMessage odom_data = odom_list_.front();
       odom_list_.pop_front();
       time_locker.unlock();
-      // 构建轮式里程计在tracking_frame下的位姿所对应的变换矩阵
-      Eigen::Matrix3d transformation_matrix_wheel;
       float x = config_.wheel_odom_position_x;
       float y = config_.wheel_odom_position_y;
       float theta = config_.wheel_odom_position_theta;
-      transformation_matrix_wheel << std::cos(theta), -std::sin(theta), x,
-          std::sin(theta), std::cos(theta), y, 0, 0, 1;
-      // 计算此时 wheel_odom在local下的位姿
-      Wheel_Odom = Wheel_Odom * odom_data.mclDeltaPosition;
+      // 计算此时 wheel_odom在local坐标系下的绝对位姿
+      wheel_odom = wheel_odom * odom_data.mclDeltaPosition;
       // 位姿的表示形式（x,y,theta），可以直接乘以增量，*运算符事先已经重载过的
-      float x_ = Wheel_Odom.mfX;
-      float y_ = Wheel_Odom.mfY;
-      float theta_ = Wheel_Odom.mfTheta;
-      // 构建wheel_odom在local下的位姿对应的变换矩阵
-      Eigen::Matrix3d transformation_matrix;
-      transformation_matrix << std::cos(theta_), -std::sin(theta_), x_,
-          std::sin(theta_), std::cos(theta_), y_, 0, 0, 1;
-      // 求解这帧里程计数据的时间戳下所对应的tracking_frame在local坐标系下的位姿
-      Eigen::Matrix3d local_to_tracking =
-          transformation_matrix * transformation_matrix_wheel.inverse();
-      // pose不写入转换函数中，便于离线写入文件
-      Position pose(odom_data.mclDeltaPosition.mlTimestamp,
-                    local_to_tracking(0, 2), local_to_tracking(1, 2),
-                    atan2(local_to_tracking(1, 0), local_to_tracking(0, 0)));
+      float x_ = -(cos(theta) * x + sin(theta) * y);
+      float y_ = -(-sin(theta) * x + cos(theta) * y);
+      float theta_ = -theta;
+      Position radar_install_inverse(odom_data.mclDeltaPosition.mlTimestamp, x_,
+                                     y_, theta_);
+      Position pose = wheel_odom * radar_install_inverse;
       if (!offline_mapping_) {
-        // std::thread th(
-        //     std::bind(&CartoMapping::OdomDataConversionAndAddFunc, this,
-        //     pose));
-        // th.join();
-        OdomDataConversionAndAddFunc(pose);  // 直接调和注释的功能相同
+        OdomDataConversionAndAddFunc(pose);
       } else {
         record_index_odom_++;
         SaveOdomDataToFile(pose);
@@ -332,10 +322,6 @@ void CartoMapping::HandleTimeQueue() {
       // imu解锁
       time_locker.unlock();
       if (!offline_mapping_) {
-        // std::thread th(
-        //     std::bind(&CartoMapping::ImuDataConversionAndAddFunc,this,
-        //     imu_data));
-        // th.join();
         ImuDataConversionAndAddFunc(imu_data);
       } else {
         record_index_imu_++;
@@ -348,10 +334,13 @@ void CartoMapping::HandleTimeQueue() {
   //  laser
   fclose(RadarDataFile_);
   radar_file_open_ = false;
-  locker.lock();
-  handle_radar_finish_ = true;
-  stop_mapping_cond_.notify_all();
-  locker.unlock();
+  {
+    std::unique_lock<std::mutex> locker(stop_mapping_mtx_);
+    locker.lock();
+    handle_radar_finish_ = true;
+    stop_mapping_cond_.notify_all();
+    locker.unlock();
+  }
   // odom
   fclose(OdomDataFile_);
   odom_file_open_ = false;
@@ -414,85 +403,6 @@ void CartoMapping::SaveImuDataToFile(ImuSensoryMessage &imu_data) {
   fprintf(ImuDataFile_, "\n");  // 换行
 }
 
-void *CartoMapping::HandleLaser(void *ptr) {
-  pthread_detach(pthread_self());
-  CartoMapping *p = reinterpret_cast<CartoMapping *>(ptr);
-  // 创建一个记录雷达数据的空文件，往文件里写入雷达数据（针对于离线建图）
-  std::string str = " ";
-  std::ofstream ofs("./data/laser_data.rawmap");  //./代表当前工作目录下
-  // 如果文件不存在，则会创建新文件；如果文件已存在，则会清空文件内容。
-  ofs << str;   // 将空字符串 str 写入文件 ofs，即写入空格
-  ofs.close();  // 关闭文件流 ofs
-  system("mkdir -p  data");
-  // 如果目录不存在，则创建该目录。这里使用 -p
-  // 参数是为了确保在创建目录时能够创建所有需要的上级目录
-  // 返回该文件的文件指针，后面用该指针对文件进行读写操作
-  p->RadarDataFile_ = fopen("./data/laser_data.rawmap", "w+");
-  usleep(1000);
-  // laser
-  p->radar_file_open_ = true;
-  p->handle_radar_finish_ = false;
-  int record_index = 0;
-  //----------循环会持续进行，直到激光雷达数据列表为空且add_data_标志为假------
-  while (!p->lidar_list_.empty() || p->add_data_) {
-    // 判断雷达数据列表非空才进行处理数据,防止如果取数据比放数据快时,程序报错
-    if (!p->lidar_list_.empty()) {  // 保证有数据才可以拿
-      // 使用互斥锁保护雷达数据列表的操作
-      std::unique_lock<std::mutex> locker(p->raw_lidar_list_mtx_);
-      RadarSensoryMessage Laser_data = p->lidar_list_.front();
-      // 取数据，取数据的速度可能比往list中放快
-      p->lidar_list_.pop_front();  // 是为了跳出循环
-      locker.unlock();
-      // 在线
-      if (!p->offline_mapping_) {
-        // p->LaserDataConversionAndAddFunc(Laser_data);
-        std::thread th(std::bind(&CartoMapping::LaserDataConversionAndAddFunc,
-                                 p, Laser_data));
-        th.detach();
-      }
-      // 离线就是把从容器中取出的Laser_data写入文件中（未进行数据格式转换的）
-      else {
-        // 写入index、时间戳、
-        int start_i =
-            fabs(p->laser_min_angle_ -
-                 Laser_data.mstruRadarMessage.mstruRadarHeaderData.mfAngleMin) /
-            p->angle_increment_;
-        double ft =
-            start_i *
-            Laser_data.mstruRadarMessage.mstruRadarHeaderData.mfTimeIncreament *
-            1000000;
-        uint64_t lut = (uint64_t)ft;
-        // 计算实际使用的激光数据的时间戳
-        uint64_t real_time =
-            Laser_data.mstruRadarMessage.mstruRadarHeaderData.mlTimeStamp + lut;
-        int record_cnt = fabs((p->laser_max_angle_ - p->laser_min_angle_) /
-                              p->laser_resolution_) +
-                         1;
-        fprintf(
-            p->RadarDataFile_, "%d %d %ld %f %f %f %f", record_index,
-            record_cnt, real_time,
-            Laser_data.mstruRadarMessage.mstruRadarHeaderData.mfTimeIncreament *
-                p->stepIncreament_,
-            p->laser_min_angle_, p->laser_max_angle_, p->laser_resolution_);
-        int end_i = start_i + (record_cnt - 1) * p->stepIncreament_;
-        for (int i = start_i; i <= end_i; i += p->stepIncreament_) {
-          double xp =
-              Laser_data.mstruRadarMessage.mstruSingleLayerData.mvPoints[i](0);
-          double yp =
-              Laser_data.mstruRadarMessage.mstruSingleLayerData.mvPoints[i](1);
-          double laser_len = sqrt(xp * xp + yp * yp);
-          fprintf(p->RadarDataFile_, " %f", laser_len);
-        }
-        fprintf(p->RadarDataFile_, "\n");  // 换行
-        record_index++;
-      }
-    }
-    usleep(1000);
-  }
-  fclose(p->RadarDataFile_);
-  p->radar_file_open_ = false;
-  p->handle_radar_finish_ = true;
-}
 void CartoMapping::LaserDataConversionAndAddFunc(RadarSensoryMessage &data) {
   if (trajectory_id_ < 0) {
     return;
@@ -500,95 +410,18 @@ void CartoMapping::LaserDataConversionAndAddFunc(RadarSensoryMessage &data) {
   if (last_data_time_ == 0 ||
       last_data_time_ <
           data.mstruRadarMessage.mstruRadarHeaderData.mlTimeStamp) {
-    // SLAM_DEBUG ("开始添加一次雷达数据\n");
     uint64_t t1 = gomros::common::GetCurrentTime_us();
     trajectory_builder_->AddSensorData("range0", ToCartoPointCloud(data));
-    // SLAM_DEBUG ("添加一次雷达数据成功\n");
     uint64_t t2 = gomros::common::GetCurrentTime_us();
-    SLAM_INFO("添加一帧雷达数据耗时：%lu\n", t2 - t1);
+    // SLAM_DEBUG("添加一帧雷达数据耗时：%lu\n", t2 - t1);
     last_data_time_ = data.mstruRadarMessage.mstruRadarHeaderData.mlTimeStamp;
   } else {
-    SLAM_DEBUG("上一帧时间和当前时间:%lu     %lu\n", last_data_time_,
-               data.mstruRadarMessage.mstruRadarHeaderData.mlTimeStamp);
+    SLAM_WARN("上一帧时间和当前时间:%lu     %lu\n", last_data_time_,
+              data.mstruRadarMessage.mstruRadarHeaderData.mlTimeStamp);
     SLAM_WARN("laser timeout.....\n");
   }
 }
-void *CartoMapping::HandleOdom(void *ptr) {
-  pthread_detach(pthread_self());
-  CartoMapping *p = reinterpret_cast<CartoMapping *>(ptr);
-  // 创建一个记录里程计数据的空文件，往文件里写入里程计数据（针对于离线建图）
-  std::string str = " ";
-  std::ofstream ofs("./data/odom_data.rawmap");
-  // 如果文件不存在，则会创建新文件；如果文件已存在，则会清空文件内容。
-  ofs << str;
-  ofs.close();
-  system("mkdir -p  data");
-  // 如果目录不存在，则创建该目录。这里使用 -p
-  // 参数是为了确保在创建目录时能够创建所有需要的上级目录
-  p->OdomDataFile_ = fopen("./data/odom_data.rawmap", "w+");
-  // 返回该文件的文件指针，后面用该指针对文件进行读写操作
-  usleep(1500000);  // 等待文件打开完成
-  // odom
-  p->odom_file_open_ = true;
-  p->handle_odom_finish_ = false;
-  int record_index = 0;
-  Position Wheel_Odom;
-  while (!p->odom_list_.empty() || p->add_data_) {
-    if (!p->odom_list_.empty()) {
-      // 使用互斥锁保护里程计数据列表的操作
-      OdometerMessage odom_data = p->odom_list_.front();
-      p->odom_list_.pop_front();
 
-      // 构建轮式里程计在tracking_frame下的位姿所对应的变换矩阵
-      Eigen::Matrix3d transformation_matrix_wheel;
-      float x = p->config_.wheel_odom_position_x;
-      float y = p->config_.wheel_odom_position_y;
-      float theta = p->config_.wheel_odom_position_theta;
-      transformation_matrix_wheel << std::cos(theta), -std::sin(theta), x,
-          std::sin(theta), std::cos(theta), y, 0, 0, 1;
-      // 计算此时 wheel_odom在local下的位姿
-      Wheel_Odom = Wheel_Odom * odom_data.mclDeltaPosition;
-      // 位姿的表示形式（x,y,theta），可以直接乘以增量，*运算符事先已经重载过的
-      float x_ = Wheel_Odom.mfX;
-      float y_ = Wheel_Odom.mfY;
-      float theta_ = Wheel_Odom.mfTheta;
-      // 构建wheel_odom在local下的位姿对应的变换矩阵
-      Eigen::Matrix3d transformation_matrix;
-      transformation_matrix << std::cos(theta_), -std::sin(theta_), x_,
-          std::sin(theta_), std::cos(theta_), y_, 0, 0, 1;
-      // 求解这帧里程计数据的时间戳下所对应的tracking_frame在local坐标系下的位姿
-      Eigen::Matrix3d local_to_tracking =
-          transformation_matrix * transformation_matrix_wheel.inverse();
-      // pose不写入转换函数中，便于离线写入文件
-      Position pose(odom_data.mclDeltaPosition.mlTimestamp,
-                    local_to_tracking(0, 2), local_to_tracking(1, 2),
-                    atan2(local_to_tracking(1, 0), local_to_tracking(0, 0)));
-      // 在线
-      if (!p->offline_mapping_ && p->use_odom_) {
-        // 封装成一个函数
-        // p->OdomDataConversionAndAddFunc(pose);
-        std::thread th(
-            std::bind(&CartoMapping::OdomDataConversionAndAddFunc, p, pose));
-        th.detach();
-      }
-      // 离线
-      else {
-        // 往文件中写入的数据都是经过处理后的数据，比如坐标变换后的
-        //  写入index、时间戳
-        fprintf(p->OdomDataFile_, "%d %ld ", record_index,
-                odom_data.mclDeltaPosition.mlTimestamp);
-        //------写入x，y，theta------
-        fprintf(p->OdomDataFile_, "%f %f %f", pose.mfX, pose.mfY, pose.mfTheta);
-        fprintf(p->OdomDataFile_, "\n");  // 换行
-        record_index++;
-      }
-    }
-    usleep(1000);
-  }
-  fclose(p->OdomDataFile_);
-  p->odom_file_open_ = false;
-  p->handle_odom_finish_ = true;
-}
 void CartoMapping::OdomDataConversionAndAddFunc(Position &pose) {
   if (trajectory_id_ < 0) {
     return;
@@ -600,69 +433,21 @@ void CartoMapping::OdomDataConversionAndAddFunc(Position &pose) {
     trajectory_builder_->AddSensorData("odom0", tmp);
     uint64_t t2 = gomros::common::GetCurrentTime_us();
     last_data_time_ = pose.mlTimestamp;
-    SLAM_WARN("添加一帧里程计数据耗时%lu\n", t2 - t1);
   } else {
-    SLAM_DEBUG("上一帧时间和当前时间:%lu %lu\n", last_data_time_,
-               pose.mlTimestamp);
+    SLAM_WARN("上一帧时间和当前时间:%lu %lu\n", last_data_time_,
+              pose.mlTimestamp);
     SLAM_WARN("odom timeout.....\n");
   }
 }
 
-void *CartoMapping::HandleImu(void *ptr) {
-  pthread_detach(pthread_self());
-  CartoMapping *p = reinterpret_cast<CartoMapping *>(ptr);
-  // 创建一个记录Imu数据的空文件，往文件里写入Imu数据（针对于离线建图）
-  std::string str = " ";
-  std::ofstream ofs("./data/imu_data.rawmap");  //./代表当前工作目录下
-  // 如果文件不存在，则会创建新文件；如果文件已存在，则会清空文件内容。
-  ofs << str;   // 将空字符串 str 写入文件 ofs，即写入空格
-  ofs.close();  // 关闭文件流 ofs
-  system("mkdir -p  data");
-  // 如果目录不存在，则创建该目录。这里使用 -p
-  // 参数是为了确保在创建目录时能够创建所有需要的上级目录
-  // 返回该文件的文件指针，后面用该指针对文件进行读写操作
-  p->ImuDataFile_ = fopen("./data/imu_data.rawmap", "w+");
-  usleep(1500000);  // 等待文件打开完成
-  // imu
-  p->imu_file_open_ = true;
-  p->handle_imu_finish_ = false;
-  int record_index = 0;
-  while (!p->imu_lists_.empty() || p->add_data_) {
-    if (!p->imu_lists_.empty()) {
-      ImuSensoryMessage imu_data = p->imu_lists_.front();
-      p->imu_lists_.pop_front();
-      // 在线
-      if (!p->offline_mapping_ && p->use_imu_) {
-        // 封装成函数
-        p->ImuDataConversionAndAddFunc(imu_data);
-      }
-      // 离线
-      else {
-        // 写入index、时间戳
-        fprintf(p->ImuDataFile_, "%d %ld ", record_index, imu_data.time_stamp);
-        //%ld这里不用改，虽然时间戳的类型并不是ld,但是因为最终getline拿到的都是字符串,一串数字形成的字符串
-        //------写入绕z轴的旋转角速度与向前加速度------
-        fprintf(p->ImuDataFile_, "%f %f ", imu_data.z_omega,
-                imu_data.forward_linear_accel);
-        // 写入z向角度
-        fprintf(p->ImuDataFile_, "%f", imu_data.z_angle);
-        fprintf(p->ImuDataFile_, "\n");  // 换行
-        record_index++;
-      }
-    }
-    usleep(1000);
-  }
-  fclose(p->ImuDataFile_);
-  p->imu_file_open_ = false;
-  p->handle_imu_finish_ = true;
-}
 void CartoMapping::ImuDataConversionAndAddFunc(ImuSensoryMessage &data) {
   if (trajectory_id_ < 0) {
     return;
   }
-  if (latest_imu_timestamp_ < 0 || latest_imu_timestamp_ < data.time_stamp) {
+  uint64_t imu_time = (uint64_t)data.time_stamp;
+  if (last_data_time_ == 0 || last_data_time_ < imu_time) {
     trajectory_builder_->AddSensorData("imu0", ToCartoImu(data));
-    latest_imu_timestamp_ = data.time_stamp;
+    last_data_time_ = data.time_stamp;
   } else {
     SLAM_WARN("imu timeout.....\n");
   }
@@ -813,11 +598,6 @@ void CartoMapping::PaintMap() {
 
   // 创建文件夹并可以指定路径
   system("mkdir -p map");
-  // std::string path =
-  // "/home/fuzhou/svn/x86_branch_refactor/plugins/mapping_and_location_carto_copy/__build/test/map";
-
-  // // 创建目录
-  // int status = mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 
   std::string full_map_data_path = config_.map_data_file_path + "/" + map_name_;
 
@@ -991,9 +771,7 @@ std::vector<std::string> CartoMapping::SplitCString(std::string &str,
 
 void CartoMapping::ReadRadarData() {
   read_radar_finish_ = false;
-  std::ifstream rawMapFileName(
-      "/home/fuzhou/svn/x86_branch_refactor/plugins/"
-      "mapping_and_location_carto_copy/data/laser_data.rawmap");
+  std::ifstream rawMapFileName("./data/laser_data.rawmap");
   usleep(100000);
   int index = 0;
   if (rawMapFileName.is_open()) {
@@ -1035,8 +813,6 @@ void CartoMapping::ReadRadarData() {
         // 使用empalce_back可以直接传入x,y.而不需要进行构造一个Vector2d类型的值
       }
       uint64_t t2 = gomros::common::GetCurrentTime_us();
-      SLAM_INFO("从文件中读取第%d帧雷达数据耗时：%lu\n", index, t2 - t1);
-      // usleep(100000);
       lidar_list_from_file_.push_back(laser_data);
     }
   } else {
@@ -1053,9 +829,7 @@ void CartoMapping::ReadOdomData() {
   float pose_y = 0.0;
   float pose_theta = 0.0;
   uint64_t pose_time = 0;
-  std::ifstream rawMapFileName(
-      "/home/fuzhou/svn/x86_branch_refactor/plugins/"
-      "mapping_and_location_carto_copy/data/odom_data.rawmap");
+  std::ifstream rawMapFileName("./data/odom_data.rawmap");
   usleep(100000);
   Position last_pose;
   int i = 0;
@@ -1071,9 +845,6 @@ void CartoMapping::ReadOdomData() {
       Position pose(pose_time, pose_x, pose_y, pose_theta);
       last_pose.mlTimestamp = pose.mlTimestamp;
       odom_list_from_file_.push_back(pose);
-      // DEBUG_LOG << "读取第" << i << "帧里程计数据";
-      SLAM_DEBUG("读取第%d帧里程计数据\n", i);
-      // usleep(50000);
     }
   } else {
     SLAM_ERROR("Failed to open file.\n");
@@ -1099,8 +870,7 @@ void CartoMapping::ReadImuData() {
       imu_z_angle = std::stof(imu_str[4]);
       ImuSensoryMessage imu_data = {imu_z_angular_v, imu_forword_acce,
                                     imu_z_angle, imu_time};
-      ImuDataConversionAndAddFunc(imu_data);
-      // usleep(10000);
+      imu_list_from_file_.push_back(imu_data);
     }
   } else {
     SLAM_ERROR("Failed to open file.\n");

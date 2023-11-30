@@ -4,13 +4,6 @@
  * @Autor: fuzhou
  * @LastEditors: fuzhou
  */
-/*
- * @Description: Copyright (C) 2022 山东亚历山大智能科技有限公司
- * @Version: 1.0
- * @Date: 2022-07-15 15:10:01
- * @LastEditTime: 2023-03-30 03:37:40
- * @Author: lcfc-desktop
- */
 #include <gtest/gtest.h>
 
 #include <fstream>
@@ -23,22 +16,6 @@
 #include "common_lib/gomros.h"
 #include "include/mapping_and_location/config_struct.h"
 #include "include/mapping_and_location/mapping_and_location.h"
-
-/*
- * @Description: Copyright (C) 2022 山东亚历山大智能科技有限公司
- * @Version: 1.0
- * @Author: renjy
- * @Date: 2022-11-21 09:39:47
- * @LastEditTime: 2023-04-05 12:36:05
- */
-#pragma once
-
-#include <string>
-#include "agv_config_lib/ConfigUtils.h"
-#include "mapping_and_location/config_struct.h"
-
-// enum MappingPattern { Online, Offline };
-//工程文件中不用枚举，涉及到从json格式文件（读的是int值）中读参，然后赋值给工程文件命名空间中的参数
 
 //-----------前端----------
 // 1.1 自适应体素滤波器参数
@@ -326,13 +303,6 @@ typedef struct CartoAndGridConfig {
           log_file_name, log_level, is_printf_to_terminal, Carto_config,
           location_config_));
 } CartoAndGridConfig;
-
-//----这个函数的内部调用了下面的Transition函数
-// bool ReadMappingAndLocationConfig(
-//     gomros::data_process::mapping_and_location::CartoAndGridConfig*
-//         config_result) {
-
-// }
 
 void MappingAndLocationConfigTransition(
     const CartoAndGridConfig& config,
@@ -683,17 +653,15 @@ void MappingAndLocationConfigTransition(
       config.location_config_.is_initial_locate;
   config_result->location_config_.init_pose_file_path =
       config.location_config_.init_pose_file_path;
-
   return;
 }
-// void DefaultWriteMappingAndLocationConfig(void) {
 
-// }
 bool ReadMappingAndLocationConfig(
     gomros::data_process::mapping_and_location::CartoAndGridConfig*
         config_result) {
   std::string mapping_and_location_config_dir =
-      "./config/mappingandlocation.json";
+      "/home/fuzhou/svn/x86_branch_refactor/plugins/"
+      "mapping_and_location_carto_copy/data/mappingandlocation.json";
   CartoAndGridConfig temp_config;
   if (ConfigUtils::decode(mapping_and_location_config_dir.c_str(),
                           temp_config)) {
@@ -703,15 +671,17 @@ bool ReadMappingAndLocationConfig(
   return false;
 }
 
-TEST(mapping_location_test, mapping_test) { 
-  gomros::common::InitMaster(1); 
-  using namespace  gomros::data_process::mapping_and_location;
+TEST(mapping_location_test, mapping_test) {
+  gomros::common::InitMaster(1);
+  using namespace gomros::data_process::mapping_and_location;
   gomros::data_process::mapping_and_location::CartoAndGridConfig config;
+  MappingAndLocation* p;
   if (ReadMappingAndLocationConfig(&config)) {
-    MappingAndLocation* p = new MappingAndLocation(config);
+    p = new MappingAndLocation(config);
+    //单元测试时，把地图名字写死了
     p->StopMapping("carto");
   }
-  while(true) {
+  while (true) {
     usleep(1);
   }
   delete p;
