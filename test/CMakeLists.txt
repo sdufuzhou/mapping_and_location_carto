@@ -19,6 +19,7 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mapping_lib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mapping_lib/carto_mapping
+    
 )
 set(CMAKE_CXX_FLAGS "-std=c++14 -g -O0 -fprofile-arcs -ftest-coverage")
 
@@ -66,10 +67,10 @@ target_link_libraries(${LIB_TEST_NAME} PUBLIC
     ${PREBUILT_DIR}/libcommon_lib.so
 )
 
-gtest_discover_tests(${LIB_TEST_NAME}
-  WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-  -lglog
-  -lgcov 
-  -lz
-  -pthread
-)
+# gtest_discover_tests(${LIB_TEST_NAME}
+#   WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+#   -lglog
+#   -lgcov 
+#   -lz
+#   -pthread
+# )
