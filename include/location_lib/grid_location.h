@@ -23,7 +23,7 @@
 #include "include/location_lib/amcl/pf.h"
 #include "include/location_lib/location_interface.h"
 #include "include/common/logger.h"
-#include "include/mapping_and_location/config_struct.h"
+#include "include/config_struct.h"
 #include "message_lib/grid_map.h"
 #include "message_lib/odometer_message.h"
 #include "message_lib/position_message.h"

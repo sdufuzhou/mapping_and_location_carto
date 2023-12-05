@@ -13,9 +13,9 @@
 #include <list>
 #include <memory>
 
-#include "common_lib/log.h"
+#include "include/config_struct.h"
+#include "include/common/logger.h"
 #include "include/mapping_lib/karto_mapping/slam_kar.h"
-#include "include/mapping_and_location/config_struct.h"
 #include "include/mapping_lib/mapping_interface.h"
 #include "message_lib/odometer_message.h"
 #include "message_lib/position_message.h"
@@ -35,8 +35,7 @@ class KartoMapping : public MappingInterface {
   using RadarSensoryInfo = gomros::message::RadarSensoryInfo;
   using Logger = gomros::common::Logger;
 
-  KartoMapping(const KartoMappingConfig &config,
-               std::shared_ptr<Logger> logger);
+  KartoMapping(const KartoMappingConfig &config);
   ~KartoMapping();
 
   virtual void SetConfiguration(void *config);
@@ -45,7 +44,9 @@ class KartoMapping : public MappingInterface {
   virtual void HandleOdomData(const OdometerMessage &data);
   // 处理雷达数据
   virtual void HandleLaserData(const RadarSensoryMessage &data);
-  
+  // 处理Imu数据
+  virtual void HandleImuData(const ImuSensoryMessage &data);
+
   // 开始建图
   virtual void StartMapping();
   // 停止建图
@@ -60,14 +61,14 @@ class KartoMapping : public MappingInterface {
 
   Position ExpolateCurrentPositionTimeRaw(uint64_t timestamp);
 
-  void RecordMapRawData(const RadarSensoryMessage &data);//录制一次数据
+  void RecordMapRawData(const RadarSensoryMessage &data);  //录制一次数据
 
-  static void* RecordDataFunc(void* ptr);//线程函数  
+  static void *RecordDataFunc(void *ptr);  //线程函数
 
-  static void* MappingFunc(void* ptr);//线程函数  
+  static void *MappingFunc(void *ptr);  //线程函数
 
   KartoMappingConfig m_MappingConfig;
-  
+
   float laser_min_angle_;
   float laser_max_angle_;
   float laser_min_range_;
@@ -81,12 +82,12 @@ class KartoMapping : public MappingInterface {
   bool file_open_ = false;
   bool start_mapping_ = false;
   bool finish_mapping_ = false;
-  
+
   FILE *m_pMapRawDataFile;
 
   std::list<Position> m_OdomListRaw;
   std::list<RadarSensoryMessage> m_RidarList;
-  std::list<Position> m_PoseList;//NO
+  std::list<Position> m_PoseList;  // NO
   pthread_mutex_t mutex_odom_list_raw;
   pthread_mutex_t mutex_pose_raw;
   pthread_mutex_t mutex_ridar_list_raw;
@@ -95,7 +96,6 @@ class KartoMapping : public MappingInterface {
   pthread_t mapping_thread_;
 
   // 一些状态变量
-  std::shared_ptr<Logger> mp_logger;
   int m_RecordIndex;
   Position m_MappingOdom;        // 建图里程计
   Position m_LastRecordPose;     // 上一次记录的位姿

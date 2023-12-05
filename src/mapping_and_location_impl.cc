@@ -10,84 +10,45 @@
 namespace gomros {
 namespace data_process {
 namespace mapping_and_location {
-MappingAndLocationImpl::MappingAndLocationImpl(
-    const KartoAndGridConfig &config) {
-  karto_and_grid_config_ = config;
-  radar_pose_base_link_.mfX =
-      karto_and_grid_config_.location_config.radar_position_x;
-  radar_pose_base_link_.mfY =
-      karto_and_grid_config_.location_config.radar_position_y;
-  radar_pose_base_link_.mfTheta =
-      karto_and_grid_config_.location_config.radar_position_theta;
-  gomros::common::SLAMLogger::SetLoggerConfig(
-      (gomros::common::LOG_LEVEL)config.log_level, config.log_file_name,
-      config.is_printf_to_terminal);
-  LoadMapNameFromFile();
-  device_state_ = std::make_shared<DeviceState>(DeviceState());
-  device_state_->mcChassisState = SYSTEM_STATE_INIT_POSE;
-  // mapping_module_ = new MappingManagerImpl(
-  //     karto_and_grid_config_.mapping_config, device_state_, p_logger_);
-
-  location_module = new LocationManagerImpl(
-      karto_and_grid_config_.location_config, device_state_);
-  mapping_module_->SetDeviceState(device_state_);
-  location_module->SetDeviceState(device_state_);
-  node_ = new Node(config.node_name);
-  CallBackEvent odom_enevt{this, OdomCallBackFunc};
-  node_->SubscribeTopic(config.sub_odom_topic, odom_enevt);
-  CallBackEvent radar_event{this, RadarCallBackFunc};
-  node_->SubscribeTopic(config.sub_radar_topic, radar_event);
-  CallBackEvent start_location_event{this, StartLocateCallBack};
-  node_->SubscribeTopic(config.sub_global_locate_cmd_topic,
-                        start_location_event);
-  CallBackEvent start_mapping_event{this, StartMappingCallBack};
-  node_->SubscribeTopic(config.sub_start_mapping_cmd_topic,
-                        start_mapping_event);
-  CallBackEvent stop_mapping_event{this, StopMappingCallBack};
-  node_->SubscribeTopic(config.sub_stop_mapping_cmd_topic, stop_mapping_event);
-  state_publisher_ = node_->AdvertiseTopic(config.ad_state_topic);
-  pose_publisher_ = node_->AdvertiseTopic(config.ad_pose_topic);
-  node_->Debug();
-  PublishRobotState();
-  if (LoadMapDataFromFile(map_file_full_path_)) {
-    LoadPoseFromFile();
-    location_module->SetIniPose(initial_position_);
-    SLAM_INFO("设置初始位姿完毕\n");
-    location_module->SetTotalOdom(total_odom_);
-    SLAM_INFO("设置总里程数完毕\n");
-    location_module->SetMapData(*map_shared_pointer_);
-    SLAM_INFO("设置地图完毕\n");
-    SLAM_INFO("开始开机初始定位\n");
-    location_module->StartGlobalLocating(
-        config.location_config.is_initial_locate);
-    SLAM_INFO("开始创建发送位姿线程\n");
-    pthread_create(&send_pose_thread, NULL, SendPose, this);
-  } else {
-    SLAM_ERROR("加载地图错误\n");
-  }
-}
 
 //------------------------新加，里面内容待改----------------------
 MappingAndLocationImpl::MappingAndLocationImpl(
-    const CartoAndGridConfig &config) {
-  carto_and_grid_config_ = config;
+    const MappingAndLocationConfig &config) {
+  connfig_ = config;
+  gomros::common::SLAMLogger::SetLoggerConfig(
+      (gomros::common::LOG_LEVEL)config.log_level, config.log_file_name,
+      config.is_printf_to_terminal);
   //------------------雷达初始位姿参数配置---------------------
-  radar_pose_base_link_.mfX =
-      carto_and_grid_config_.location_config_.radar_position_x;
-  radar_pose_base_link_.mfY =
-      carto_and_grid_config_.location_config_.radar_position_y;
+  radar_pose_base_link_.mfX = connfig_.location_config.radar_position_x;
+  radar_pose_base_link_.mfY = connfig_.location_config.radar_position_y;
   radar_pose_base_link_.mfTheta =
-      carto_and_grid_config_.location_config_.radar_position_theta;
+      connfig_.location_config.radar_position_theta;
 
   device_state_ = std::make_shared<DeviceState>(DeviceState());
   device_state_->mcChassisState = SYSTEM_STATE_INIT_POSE;
-  mapping_module_ = new MappingManagerImpl(carto_and_grid_config_.Carto_config,
-                                           device_state_);
-
+  switch (connfig_.mapping_algorithm) {
+    case MappingAlgorithm::Cartro:
+      SLAM_INFO("使用Cartographer算法建图\n");
+      mapping_module_ =
+          new MappingManagerImpl(connfig_.carto_config, device_state_);
+      break;
+    case MappingAlgorithm::Karto:
+      SLAM_INFO("使用Karto算法建图\n");
+      mapping_module_ =
+          new MappingManagerImpl(connfig_.karto_config, device_state_);
+      break;
+    default:
+      SLAM_ERROR(
+          "建图算法配置类型错误，默认使用Cartographer算法建图！！！！！！！！！"
+          "！！！！\n");
+      mapping_module_ =
+          new MappingManagerImpl(connfig_.carto_config, device_state_);
+      break;
+  }
   // MappingManagerImpl类的对象调用自身的成员函数
   mapping_module_->SetDeviceState(device_state_);
   location_module =
-      new LocationManagerImpl(config.location_config_, device_state_);
+      new LocationManagerImpl(config.location_config, device_state_);
   mapping_module_->SetDeviceState(device_state_);
   location_module->SetDeviceState(device_state_);
 
@@ -134,7 +95,7 @@ MappingAndLocationImpl::MappingAndLocationImpl(
 
     SLAM_INFO("开始开机初始定位\n");
     location_module->StartGlobalLocating(
-        config.location_config_.is_initial_locate);
+        config.location_config.is_initial_locate);
 
     SLAM_INFO("开始创建发送位姿线程\n");
     pthread_create(&send_pose_thread, NULL, SendPose, this);
@@ -152,18 +113,11 @@ MappingAndLocationImpl::~MappingAndLocationImpl() {
 
 //---------------新加------------
 void MappingAndLocationImpl::SetConfiguration(
-    const CartoAndGridConfig &config) {
-  mapping_module_->SetConfiguration(config.Carto_config);
-  location_module->SetConfiguration(config.location_config_);
+    const MappingAndLocationConfig &config) {
+  mapping_module_->SetConfiguration(config.carto_config);
+  location_module->SetConfiguration(config.location_config);
 }
 
-KartoAndGridConfig MappingAndLocationImpl::GetKartoAndGridConfig() {
-  return karto_and_grid_config_;
-}
-
-CartoAndGridConfig MappingAndLocationImpl::GetCartoAndGridConfig() {
-  return carto_and_grid_config_;
-}
 
 void MappingAndLocationImpl::OdomCallBackFunc(void *object, char *buf,
                                               const int size) {
@@ -342,27 +296,23 @@ void MappingAndLocationImpl::SetInitPose(Position init_pose) {
 void MappingAndLocationImpl::LoadMapNameFromFile() {
   std::string data_string;
   std::string map_config_full_path =
-      carto_and_grid_config_.Carto_config.map_config_file_path + "/" +
-      "map_config.json";
+      connfig_.carto_config.map_config_file_path + "/" + "map_config.json";
   if (JsonRead(map_config_full_path.c_str(), &data_string)) {
     Json::Reader reader;
     Json::Value data_json;
     if (!reader.parse(data_string, data_json)) {
       SLAM_ERROR("###解析地图配置数据错误\n");
       map_file_full_path_ =
-          carto_and_grid_config_.Carto_config.map_data_file_path + "/" +
-          "ale.smap";
+          connfig_.carto_config.map_data_file_path + "/" + "ale.smap";
       return;
     } else {
-      map_file_full_path_ =
-          carto_and_grid_config_.Carto_config.map_data_file_path + "/" +
-          data_json["defaultMap"].asString();
+      map_file_full_path_ = connfig_.carto_config.map_data_file_path + "/" +
+                            data_json["defaultMap"].asString();
     }
   } else {
     SLAM_ERROR("###打开地图配置文件失败\n");
     map_file_full_path_ =
-        carto_and_grid_config_.Carto_config.map_data_file_path + "/" +
-        "ale.smap";
+        connfig_.carto_config.map_data_file_path + "/" + "ale.smap";
     return;
   }
   SLAM_INFO("加载到的默认地图全路径为%s\n", map_file_full_path_.c_str());
@@ -431,12 +381,12 @@ void MappingAndLocationImpl::LoadPoseFromFile() {
   std::string data_string;
   char filename[128], filename1[128];
   SLAM_INFO("初始位姿文件存放路径%s\n",
-            carto_and_grid_config_.location_config_.init_pose_file_path
-                .c_str());  //------location_config_---------
+            connfig_.location_config.init_pose_file_path
+                .c_str());  //------location_config---------
   snprintf(filename, sizeof(filename), "%s/zero.json",
-           carto_and_grid_config_.location_config_.init_pose_file_path.c_str());
+           connfig_.location_config.init_pose_file_path.c_str());
   snprintf(filename1, sizeof(filename1), "%s/zero1.json",
-           carto_and_grid_config_.location_config_.init_pose_file_path.c_str());
+           connfig_.location_config.init_pose_file_path.c_str());
   if (!JsonRead(filename, &data_string) && !JsonRead(filename1, &data_string)) {
     initial_position_.mfX = 0;
     initial_position_.mfY = 0;

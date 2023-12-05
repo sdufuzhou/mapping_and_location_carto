@@ -40,7 +40,7 @@
 #include <string>
 #include <vector>
 
-#include "include/mapping_and_location/config_struct.h"
+#include "include/config_struct.h"
 #include "include/mapping_lib/karto_mapping/Mapper.h"
 #include "include/mapping_lib/karto_mapping/spa_solver.h"
 #include "include/mapping_lib/karto_mapping/Karto.h"

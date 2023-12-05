@@ -21,7 +21,7 @@
 #include "common_lib/gomros.h"
 #include "common_lib/log.h"
 #include "include/common/logger.h"
-#include "include/mapping_and_location/config_struct.h"
+#include "include/config_struct.h"
 #include "include/mapping_lib/carto_mapping/create_options.h"
 #include "include/mapping_lib/mapping_interface.h"
 #include "message_lib/imu_message.h"

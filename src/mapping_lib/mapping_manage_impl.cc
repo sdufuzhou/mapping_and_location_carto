@@ -25,8 +25,7 @@ MappingManagerImpl::MappingManagerImpl(
   last_imu_data.time_stamp =
       0;  //--------------------新加IMU数据的时间戳--------------------------
   is_stop_mapping_ = false;
-  mp_MappingModule =
-      new CartoMapping(config);  //父类的指针指向子类的对象
+  mp_MappingModule = new CartoMapping(config);  //父类的指针指向子类的对象
   pthread_mutex_init(&mutex_pose, nullptr);        //
   pthread_mutex_init(&mutex_radar_data, nullptr);  //
   pthread_mutex_init(&mutex_odom_data, nullptr);   //
@@ -34,7 +33,22 @@ MappingManagerImpl::MappingManagerImpl(
                      nullptr);  //---------------新加-----------
   // pthread_create(&handle_odom_thread, NULL, HandleOdomData, this);
   // pthread_create(&handle_radar_thtead, NULL, HandleLaserData, this);
-  SLAM_INFO ("当前建图算法为Cartographer\n");
+  SLAM_INFO("当前建图算法为Cartographer\n");
+}
+
+MappingManagerImpl::MappingManagerImpl(
+    const KartoMappingConfig &config,
+    std::shared_ptr<DeviceState> device_state) {
+  device_state_ = device_state;
+  last_odom_data.mclDeltaPosition.mlTimestamp = 0;
+  last_radar_data.mstruRadarMessage.mstruRadarHeaderData.mlTimeStamp = 0;
+  is_stop_mapping_ = false;
+  mp_MappingModule = new KartoMapping(config);
+  pthread_mutex_init(&mutex_pose, nullptr);        //
+  pthread_mutex_init(&mutex_radar_data, nullptr);  //
+  pthread_mutex_init(&mutex_odom_data, nullptr);   //
+  // pthread_create(&handle_odom_thread, NULL, HandleOdomData, this);
+  // pthread_create(&handle_radar_thtead, NULL, HandleLaserData, this);
 }
 
 MappingManagerImpl::~MappingManagerImpl() {
@@ -68,7 +82,7 @@ void MappingManagerImpl::SetRadarData(const RadarSensoryMessage &data) {
       mp_MappingModule->HandleLaserData(data);
       if (mp_MappingModule->IsFinishMapping()) {
         device_state_->mcChassisState = SYSTEM_STATE_FREE;
-        SLAM_INFO ("结束建图!\n");
+        SLAM_INFO("结束建图!\n");
         is_stop_mapping_ = false;
       }
     }
@@ -89,10 +103,10 @@ void *MappingManagerImpl::HandleLaserData(void *ptr) {
   int no_data_cnt = 0;
   while (1) {
     if (lp_this->have_radar_data_)
-      break;        //等待雷达数据的到来，have_radar_data_会变成true，就会跳出死循环
+      break;  //等待雷达数据的到来，have_radar_data_会变成true，就会跳出死循环
     usleep(50000);  //降低循环的频率，防止过度占用CPU内存
   }
-  SLAM_INFO ("建图模块雷达线程开始处理雷达数据!\n");
+  SLAM_INFO("建图模块雷达线程开始处理雷达数据!\n");
   while (1) {
     pthread_mutex_lock(&(lp_this->mutex_radar_data));  //先锁上
 
@@ -156,7 +170,7 @@ void *MappingManagerImpl::HandleOdomData(void *ptr) {
     if (lp_this->have_odom_data_) break;
     usleep(50000);  //暂停 50 毫秒，让出 CPU 时间给其他进程或线程。
   }
-  SLAM_INFO ("建图模块里程计线程开始处理里程计数据!\n");
+  SLAM_INFO("建图模块里程计线程开始处理里程计数据!\n");
   while (1) {
     pthread_mutex_lock(&(
         lp_this
@@ -224,7 +238,7 @@ void *MappingManagerImpl::HandlemuData(void *ptr) {
       break;  //等待imu数据的到来，have_imu_data_会变成true，就会跳出死循环
     usleep(50000);  //降低循环的频率，防止过度占用CPU内存
   }
-  SLAM_INFO ("建图模块Imu线程开始处理imu数据!\n");
+  SLAM_INFO("建图模块Imu线程开始处理imu数据!\n");
   while (1) {
     pthread_mutex_lock(&(lp_this->mutex_imu_data));  //先锁上
 

@@ -275,7 +275,7 @@ typedef struct GridLocationConfig {
           init_pose_file_path));
 } GridLocationConfig;
 
-typedef struct CartoAndGridConfig {
+typedef struct MappingAndLocationConfig {
   std::string node_name;
   std::string sub_odom_topic;   // 订阅里程计话题
   std::string sub_radar_topic;  // 订阅雷达话题
@@ -295,12 +295,12 @@ typedef struct CartoAndGridConfig {
           sub_stop_mapping_cmd_topic, ad_state_topic, ad_pose_topic,
           log_file_name, log_level, is_printf_to_terminal, Carto_config,
           location_config_));
-} CartoAndGridConfig;
+} MappingAndLocationConfig;
 
 
 void MappingAndLocationConfigTransition(
-    const CartoAndGridConfig& config,
-    gomros::data_process::mapping_and_location::CartoAndGridConfig*
+    const MappingAndLocationConfig& config,
+    gomros::data_process::mapping_and_location::MappingAndLocationConfig*
         config_result) {
   using namespace gomros::data_process::mapping_and_location;
 
@@ -651,11 +651,11 @@ void MappingAndLocationConfigTransition(
 }
 
 bool ReadMappingAndLocationConfig(
-    gomros::data_process::mapping_and_location::CartoAndGridConfig*
+    gomros::data_process::mapping_and_location::MappingAndLocationConfig*
         config_result) {
   std::string mapping_and_location_config_dir =
       "/home/fuzhou/svn/x86_branch_refactor/plugins/mapping_and_location_carto_copy/data/mappingandlocation.json";
-  CartoAndGridConfig temp_config;
+  MappingAndLocationConfig temp_config;
   if (ConfigUtils::decode(mapping_and_location_config_dir.c_str(),
                           temp_config)) {
     MappingAndLocationConfigTransition(temp_config, config_result);
@@ -668,7 +668,7 @@ bool ReadMappingAndLocationConfig(
 int main() {
     gomros::common::InitMaster(1); 
     using namespace  gomros::data_process::mapping_and_location;
-    gomros::data_process::mapping_and_location::CartoAndGridConfig config;
+    gomros::data_process::mapping_and_location::MappingAndLocationConfig config;
     MappingAndLocation* p;
     if (ReadMappingAndLocationConfig(&config)) {
         p = new MappingAndLocation(config);

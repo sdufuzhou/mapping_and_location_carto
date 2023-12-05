@@ -1,4 +1,4 @@
-#include "include/mapping_lib/carto_mapping.h"
+#include "include/mapping_lib/carto_mapping/carto_mapping.h"
 #include <fstream>
 #include <string>
 #include <vector>
@@ -12,31 +12,22 @@ CartoMapping::CartoMapping(const CartoMappingConfig &config) {
   // 在构造函数中，给CartoMapping类成员变量config_赋初值
   config_ = config;
   // 传感器选择
-  use_odom_ = config_.use_odom_data;
-  use_imu_ = config_.use_imu_data;
-
+  use_odom_ = config_.trajectory_config.use_odom_data;
+  use_imu_ = config_.trajectory_config.use_imu_data;
   // 建图模式选择
   offline_mapping_ = config_.mapping_pattern;
-
   // 转换为弧度
   laser_min_angle_ = config_.mapping_start_angle / 180.0 * M_PI;
   laser_max_angle_ = config_.mapping_end_angle / 180.0 * M_PI;
-  laser_resolution_ = config_.laser_resolution / 180.0 * M_PI;
+  laser_resolution_ = config_.radar_resolution / 180.0 * M_PI;
 
-  //  这两个用的是carto里自带的参数
-  laser_max_range_ = config_.max_range;
-  laser_min_range_ = config_.min_range;
+  // //  这两个用的是carto里自带的参数
+  // laser_max_range_ = config_.max_range;
+  // laser_min_range_ = config_.min_range;
 }
 CartoMapping::~CartoMapping() {}
 
 void CartoMapping::SetConfiguration(void *config) {
-  config_ = *(reinterpret_cast<CartoMappingConfig *>(config));
-  laser_min_angle_ = config_.mapping_start_angle / 180 * M_PI;  // 转换为弧度
-  laser_max_angle_ = config_.mapping_end_angle / 180 * M_PI;
-  laser_resolution_ = config_.laser_resolution / 180 * M_PI;
-  // 这两个用的是carto里自带的参数
-  laser_max_range_ = config_.max_range;
-  laser_min_range_ = config_.min_range;
 }
 void CartoMapping::StartMapping() {
   // 共同的
@@ -186,16 +177,16 @@ void CartoMapping::HandleLaserData(const RadarSensoryMessage &data) {
     }
     laser_min_angle_ = fmod(laser_min_angle_ + 5 * M_PI, 2 * M_PI) - M_PI;
     laser_max_angle_ = fmod(laser_max_angle_ + 5 * M_PI, 2 * M_PI) - M_PI;
-    if (laser_min_range_ <
-        data.mstruRadarMessage.mstruRadarHeaderData.mfRangeMin) {
-      laser_min_range_ = data.mstruRadarMessage.mstruRadarHeaderData.mfRangeMin;
-      SLAM_ERROR("建图模块配置文件雷达最小使用距离小于雷达数据最小距离\n");
-    }
-    if (laser_max_range_ >
-        data.mstruRadarMessage.mstruRadarHeaderData.mfRangeMax) {
-      laser_max_range_ = data.mstruRadarMessage.mstruRadarHeaderData.mfRangeMax;
-      SLAM_ERROR("建图模块配置文件雷达最大使用距离大于雷达数据最大距离\n");
-    }
+    // if (laser_min_range_ <
+    //     data.mstruRadarMessage.mstruRadarHeaderData.mfRangeMin) {
+    //   laser_min_range_ = data.mstruRadarMessage.mstruRadarHeaderData.mfRangeMin;
+    //   SLAM_ERROR("建图模块配置文件雷达最小使用距离小于雷达数据最小距离\n");
+    // }
+    // if (laser_max_range_ >
+    //     data.mstruRadarMessage.mstruRadarHeaderData.mfRangeMax) {
+    //   laser_max_range_ = data.mstruRadarMessage.mstruRadarHeaderData.mfRangeMax;
+    //   SLAM_ERROR("建图模块配置文件雷达最大使用距离大于雷达数据最大距离\n");
+    // }
     SLAM_DEBUG(
         "建图模块配置雷达角度分辨率为%f, 起始角度为%f, 终止角度为%f, "
         "最小距离为%f, 最大距离为%f\n",
@@ -623,7 +614,7 @@ void CartoMapping::PaintMap() {
 void CartoMapping::CreatCartoModule() {
   // 传入的config_在构造函数中已经赋值，这里是两个函数的调用。
   auto map_builder_options = GetMapBuilderOptions(config_);
-  auto trajectory_builder_options = GetTrajectoryBuilderOptions(config_);
+  auto trajectory_builder_options = GetTrajectoryBuilderOptions(config_.trajectory_config);
   // 创建map_builder_
   map_builder_ =
       absl::make_unique<cartographer::mapping::MapBuilder>(map_builder_options);

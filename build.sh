@@ -41,7 +41,7 @@ echo ${robotic_project_dir}
 echo ${output_dir}
 echo "########################################################"
 
-rm -rf ${build_dir}/*
+# rm -rf ${build_dir}/*
 
 cmake -B${build_dir} \
       -DROBOTIC_PROJECT_DIR="${robotic_project_dir}" \
@@ -50,7 +50,7 @@ cmake -B${build_dir} \
 cd ${build_dir}
 make -j8
 
-if [ "$run_install" = "yes" ]; then
-  mkdir -p ${output_dir}
-  make install
-fi
+# if [ "$run_install" = "yes" ]; then
+#   mkdir -p ${output_dir}
+#   make install
+# fi

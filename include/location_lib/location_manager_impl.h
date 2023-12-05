@@ -19,10 +19,10 @@
 
 #include "common_lib/log.h"
 #include "common_lib/node.h"
+#include "include/common/logger.h"
+#include "include/config_struct.h"
 #include "include/location_lib/grid_location.h"
 #include "include/location_lib/location_interface.h"
-#include "include/mapping_and_location/config_struct.h"
-#include "include/common/logger.h"
 #include "message_lib/cmd_message.h"
 #include "message_lib/device_state.h"
 #include "message_lib/odometer_message.h"
@@ -98,6 +98,7 @@ class LocationManagerImpl {
   void StopLocate();
 
   OdometerMessage GetRawOdomPose();
+
  private:
   void SavePoseToServer();
 

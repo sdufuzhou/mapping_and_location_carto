@@ -34,9 +34,12 @@ add_executable(${LIB_TEST_NAME}
 
 set(PREBUILT_DIR ${ROBOTIC_PROJECT_DIR}/prebuilt/lib_so)
 
-target_link_libraries(${LIB_TEST_NAME}
+target_link_libraries(${LIB_TEST_NAME} PUBLIC
+    ${GTEST_LIBRARIES}
     ${GLOG_LIBRARIES}
-    ${PCL_LIBRARIES} 
+    ${GFLAGS_LIBRARIES}
+    ${OpenCV_LIBRARIES}
+    ${PCL_LIBRARIES}
     ${CERES_LIBRARIES} 
     ${EIGEN3_LIBRARIES}
     ${Boost_LIBRARIES}

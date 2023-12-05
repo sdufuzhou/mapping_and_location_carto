@@ -6,356 +6,339 @@ namespace mapping_and_location {
 
 //地图创建参数配置具体过程
 cartographer::mapping::proto::MapBuilderOptions GetMapBuilderOptions(
-    const CartoMappingConfig &m_MappingConfig) {
-
+    const CartoMappingConfig &mapping_config) {
   cartographer::mapping::proto::MapBuilderOptions map_builder_options;
-  
-  map_builder_options.set_use_trajectory_builder_2d(
-      m_MappingConfig.use_trajectory_builder_2d);
+
+  map_builder_options.set_use_trajectory_builder_2d(true);
   map_builder_options.set_num_background_threads(
-      m_MappingConfig.num_background_threads);
+      mapping_config.num_background_threads);
   map_builder_options.set_collate_by_trajectory(
-      m_MappingConfig.collate_by_trajectory);
+      mapping_config.collate_by_trajectory);
   // 该函数返回pose_graph_options_是一个指针，类型为PoseGraphOptions
   PoseGraphOptions *pose_graph_options =
       map_builder_options.mutable_pose_graph_options();
   // PoseGraphOptions *p还有一些单独的变量需要赋值
-  pose_graph_options->set_optimize_every_n_nodes(
-      m_MappingConfig.optimize_every_n_nodes);
-  pose_graph_options->set_matcher_translation_weight(
-      m_MappingConfig.matcher_translation_weight);
-  pose_graph_options->set_matcher_rotation_weight(
-      m_MappingConfig.matcher_rotation_weight);
-  pose_graph_options->set_max_num_final_iterations(
-      m_MappingConfig.max_num_final_iterations);
-  pose_graph_options->set_global_sampling_ratio(
-      m_MappingConfig.global_sampling_ratio);
-  pose_graph_options->set_log_residual_histograms(
-      m_MappingConfig.log_residual_histograms);
-  pose_graph_options->set_global_constraint_search_after_n_seconds(
-      m_MappingConfig.global_constraint_search_after_n_seconds);
-
-  GetConstraintBuilderOptions(pose_graph_options, m_MappingConfig);
-  GetOptimizationProblemOptions(pose_graph_options, m_MappingConfig);
-  // map_builder_options.set_allocated_pose_graph_options(pose_graph_options);
+  SetPoseGraphOptions(mapping_config.pose_graph_config, pose_graph_options);
   return map_builder_options;
 }
 
-//约束构建的相关参数
-void GetConstraintBuilderOptions(PoseGraphOptions *pose_graph_options,
-                                 const CartoMappingConfig &m_MappingConfig) {
-  // 约束构建的相关参数
-  ::cartographer::mapping::constraints::proto::ConstraintBuilderOptions
-      *constraint_builder_options =
-          pose_graph_options->mutable_constraint_builder_options();
-  constraint_builder_options->set_sampling_ratio(
-      m_MappingConfig.constraint_builder_.sampling_ratio);
-  constraint_builder_options->set_max_constraint_distance(
-      m_MappingConfig.constraint_builder_.max_constraint_distance);
-  constraint_builder_options->set_min_score(
-      m_MappingConfig.constraint_builder_.min_score);
-  constraint_builder_options->set_global_localization_min_score(
-      m_MappingConfig.constraint_builder_.global_localization_min_score);
-  constraint_builder_options->set_loop_closure_translation_weight(
-      m_MappingConfig.constraint_builder_.loop_closure_translation_weight);
-  constraint_builder_options->set_loop_closure_rotation_weight(
-      m_MappingConfig.constraint_builder_.loop_closure_rotation_weight);
-  constraint_builder_options->set_log_matches(
-      m_MappingConfig.constraint_builder_.log_matches);  //-- 打印约束计算的log
-  // 基于分支定界算法的2d粗匹配器
-  ::cartographer::mapping::scan_matching::proto::
-      FastCorrelativeScanMatcherOptions2D *fast_correlative_scan_matcher =
-          constraint_builder_options
-              ->mutable_fast_correlative_scan_matcher_options();
-  fast_correlative_scan_matcher->set_linear_search_window(
-      m_MappingConfig.constraint_builder_.fast_correlative_scan_matcher_
-          .linear_search_window);
-  fast_correlative_scan_matcher->set_angular_search_window(
-      m_MappingConfig.constraint_builder_.fast_correlative_scan_matcher_
-          .angular_search_window);
-  fast_correlative_scan_matcher->set_branch_and_bound_depth(
-      m_MappingConfig.constraint_builder_.fast_correlative_scan_matcher_
-          .branch_and_bound_depth);
-  // 基于ceres的2d精匹配器
-  ::cartographer::mapping::scan_matching::proto::CeresScanMatcherOptions2D
-      *ceres_scan_matcher =
-          constraint_builder_options->mutable_ceres_scan_matcher_options();
-  ceres_scan_matcher->set_occupied_space_weight(
-      m_MappingConfig.constraint_builder_.ceres_scan_matcher_end_
-          .occupied_space_weight);
-  ceres_scan_matcher->set_translation_weight(
-      m_MappingConfig.constraint_builder_.ceres_scan_matcher_end_
-          .translation_weight);
-  ceres_scan_matcher->set_rotation_weight(
-      m_MappingConfig.constraint_builder_.ceres_scan_matcher_end_
-          .rotation_weight);
-  ::cartographer::common::proto::CeresSolverOptions *ceres_solver_options =
-      ceres_scan_matcher->mutable_ceres_solver_options();
-  ceres_solver_options->set_use_nonmonotonic_steps(
-      m_MappingConfig.constraint_builder_.ceres_scan_matcher_end_
-          .use_nonmonotonic_steps);
-  ceres_solver_options->set_max_num_iterations(
-      m_MappingConfig.constraint_builder_.ceres_scan_matcher_end_
-          .max_num_iterations);
-  ceres_solver_options->set_num_threads(
-      m_MappingConfig.constraint_builder_.ceres_scan_matcher_end_.num_threads);
-  //   ceres_scan_matcher->set_allocated_ceres_solver_options(ceres_solver_options);
-  //   constraint_builder_options->set_allocated_ceres_scan_matcher_options(
-  //       ceres_scan_matcher);
-  //   constraint_builder_options
-  //       ->set_allocated_fast_correlative_scan_matcher_options(
-  //           fast_correlative_scan_matcher);
-  //   pose_graph_options->set_allocated_constraint_builder_options(
-  //       constraint_builder_options);
-}
-
-// 优化残差方程的相关参数
-
-void GetOptimizationProblemOptions(PoseGraphOptions *pose_graph_options,
-                                   const CartoMappingConfig &m_MappingConfig) {
-  // 通过调用函数返回对象
-  ::cartographer::mapping::optimization::proto::OptimizationProblemOptions
-      *optimization_problem_options =
-          pose_graph_options->mutable_optimization_problem_options();
-  optimization_problem_options->set_huber_scale(
-      m_MappingConfig.optimization_problem_.huber_scale);
-  // 前端结果残差的权重
-  optimization_problem_options->set_local_slam_pose_translation_weight(
-      m_MappingConfig.optimization_problem_.local_slam_pose_translation_weight);
-  optimization_problem_options->set_local_slam_pose_rotation_weight(
-      m_MappingConfig.optimization_problem_.local_slam_pose_rotation_weight);
-  // 里程计残差的权重
-  optimization_problem_options->set_odometry_translation_weight(
-      m_MappingConfig.optimization_problem_.odometry_translation_weight);
-  optimization_problem_options->set_odometry_rotation_weight(
-      m_MappingConfig.optimization_problem_.odometry_rotation_weight);
-  // gps残差的权重
-  optimization_problem_options->set_fixed_frame_pose_translation_weight(
-      m_MappingConfig.optimization_problem_
-          .fixed_frame_pose_translation_weight);
-  optimization_problem_options->set_fixed_frame_pose_rotation_weight(
-      m_MappingConfig.optimization_problem_.fixed_frame_pose_rotation_weight);
-  optimization_problem_options->set_fixed_frame_pose_use_tolerant_loss(
-      m_MappingConfig.optimization_problem_.fixed_frame_pose_use_tolerant_loss);
-  optimization_problem_options->set_fixed_frame_pose_tolerant_loss_param_a(
-      m_MappingConfig.optimization_problem_
-          .fixed_frame_pose_tolerant_loss_param_a);
-  optimization_problem_options->set_fixed_frame_pose_tolerant_loss_param_b(
-      m_MappingConfig.optimization_problem_
-          .fixed_frame_pose_tolerant_loss_param_b);
-
-  optimization_problem_options->set_log_solver_summary(
-      m_MappingConfig.optimization_problem_.log_solver_summary);
-  optimization_problem_options->set_use_online_imu_extrinsics_in_3d(
-      m_MappingConfig.optimization_problem_.use_online_imu_extrinsics_in_3d);
-  optimization_problem_options->set_fix_z_in_3d(
-      m_MappingConfig.optimization_problem_.fix_z_in_3d);
-
-  ::cartographer::common::proto::CeresSolverOptions *ceres_solver_options =
-      optimization_problem_options->mutable_ceres_solver_options();
-  ceres_solver_options->set_use_nonmonotonic_steps(
-      m_MappingConfig.optimization_problem_.use_nonmonotonic_steps);
-  ceres_solver_options->set_max_num_iterations(
-      m_MappingConfig.optimization_problem_.max_num_iterations);
-  ceres_solver_options->set_num_threads(
-      m_MappingConfig.optimization_problem_.num_threads);
-  //   optimization_problem_options->set_allocated_ceres_solver_options(
-  //       ceres_solver_options);
-  //   pose_graph_options->set_allocated_optimization_problem_options(
-  //       optimization_problem_options);
-}
-
-//前端
 cartographer::mapping::proto::TrajectoryBuilderOptions
-GetTrajectoryBuilderOptions(const CartoMappingConfig &m_MappingConfig) {
-  // 使用智能指针创建 TrajectoryBuilderOptions 对象
-  cartographer::mapping::proto::TrajectoryBuilderOptions
-      trajectory_builder_options;
-  trajectory_builder_options.set_collate_fixed_frame(
-      m_MappingConfig.collate_fixed_frame);
+GetTrajectoryBuilderOptions(const TrajectoryBuilderConfig& trajectory_builder_config) {
+    cartographer::mapping::proto::TrajectoryBuilderOptions trajectory_builder_options;
+    trajectory_builder_options.set_collate_fixed_frame(
+      trajectory_builder_config.collate_fixed_frame);
   trajectory_builder_options.set_collate_landmarks(
-      m_MappingConfig.collate_landmarks);
-  LocalTrajectoryBuilderOptions2D *p =
+      trajectory_builder_config.collate_landmarks);
+  auto *trajectory_builder_2d_options =
       trajectory_builder_options.mutable_trajectory_builder_2d_options();
-
-  // LocalTrajectoryBuilderOptions2D *p还有一些单独的变量需要赋值
-  p->set_use_imu_data(m_MappingConfig.use_imu_data);
-  p->set_min_range(m_MappingConfig.min_range);
-  p->set_max_range(m_MappingConfig.max_range);
-  p->set_min_z(m_MappingConfig.min_z);
-  p->set_max_z(m_MappingConfig.max_z);
-  p->set_missing_data_ray_length(m_MappingConfig.missing_data_ray_length);
-  p->set_num_accumulated_range_data(m_MappingConfig.num_accumulated_range_data);
-  p->set_voxel_filter_size(m_MappingConfig.voxel_filter_size);
-
-  GetAdaptiveVoxelFilterOptions(p, m_MappingConfig);
-  GetLoopClosureAdaptiveVoxelFilterOptions(p, m_MappingConfig);
-  GetRtCsmOptions(p, m_MappingConfig);
-  GetCeresScanMatcherOptions(p, m_MappingConfig);
-  GetMotionFilterOptions(p, m_MappingConfig);
-  GetPoseExp(p, m_MappingConfig);
-  GetSubMapOptions(p, m_MappingConfig);
-  //   trajectory_builder_options.set_allocated_trajectory_builder_2d_options(p);
+  trajectory_builder_2d_options->set_use_imu_data(
+      trajectory_builder_config.use_imu_data);
+  trajectory_builder_2d_options->set_min_range(
+      trajectory_builder_config.min_range);
+  trajectory_builder_2d_options->set_max_range(
+      trajectory_builder_config.max_range);
+  trajectory_builder_2d_options->set_min_z(trajectory_builder_config.min_z);
+  trajectory_builder_2d_options->set_max_z(trajectory_builder_config.max_z);
+  trajectory_builder_2d_options->set_missing_data_ray_length(
+      trajectory_builder_config.missing_data_ray_length);
+  trajectory_builder_2d_options->set_num_accumulated_range_data(
+      trajectory_builder_config.num_accumulated_range_data);
+  trajectory_builder_2d_options->set_voxel_filter_size(
+      trajectory_builder_config.voxel_filter_size);
+  auto *adaptive_voxel_filter_options =
+      trajectory_builder_2d_options->mutable_adaptive_voxel_filter_options();
+  SetAdaptiveVoxelFilterOptions(
+      trajectory_builder_config.adaptive_voxel_filter_config,
+      adaptive_voxel_filter_options);
+  auto *loop_closure_adaptive_voxel_filter_options =
+      trajectory_builder_2d_options
+          ->mutable_loop_closure_adaptive_voxel_filter_options();
+  SetLoopClosureAdaptiveVoxelFilterOptions(
+      trajectory_builder_config.loop_closure_adaptive_voxel_filter_config,
+      loop_closure_adaptive_voxel_filter_options);
+  trajectory_builder_2d_options->set_use_online_correlative_scan_matching(
+      trajectory_builder_config.use_online_correlative_scan_matching);
+  auto *real_time_correlative_scan_matcher_options =
+      trajectory_builder_2d_options
+          ->mutable_real_time_correlative_scan_matcher_options();
+  SetRealTimeCorrelativeScanMatcherOptions(
+      trajectory_builder_config.real_time_correlative_scan_matcher_config,
+      real_time_correlative_scan_matcher_options);
+  auto *ceres_scan_matcher_options =
+      trajectory_builder_2d_options->mutable_ceres_scan_matcher_options();
+  SetCeresScanMatcherOptions(
+      trajectory_builder_config.ceres_scan_matcher_config,
+      ceres_scan_matcher_options);
+  auto *motion_filter_options =
+      trajectory_builder_2d_options->mutable_motion_filter_options();
+  SetMotionFilterOptions(trajectory_builder_config.motion_filter_config,
+                         motion_filter_options);
+  trajectory_builder_2d_options->set_imu_gravity_time_constant(
+      trajectory_builder_config.imu_gravity_time_constant);
+  auto *pose_extrapolator_options =
+      trajectory_builder_2d_options->mutable_pose_extrapolator_options();
+  SetPoseExtrapolatorOptions(trajectory_builder_config.pose_extrapolator_config,
+                             pose_extrapolator_options);
+  auto *submap_options =
+      trajectory_builder_2d_options->mutable_submaps_options();
+  SetSubmapOptions(trajectory_builder_config.submap_config, submap_options);
   return trajectory_builder_options;
 }
-//如果想拿到CartoMappingConfig里的参数，通过函数，必须要作为参数之一传进去----------
-void GetAdaptiveVoxelFilterOptions(LocalTrajectoryBuilderOptions2D *p,
-                                   const CartoMappingConfig &m_MappingConfig) {
-  // 1.1 自适应体素滤波器参数配置
-  // 通过调用函数返回对象
-  ::cartographer::sensor::proto::AdaptiveVoxelFilterOptions *p1 =
-      p->mutable_adaptive_voxel_filter_options();
-  p1->set_min_num_points(m_MappingConfig.adaptive_voxel_filter_.min_num_points);
-  p1->set_max_length(m_MappingConfig.adaptive_voxel_filter_.max_length);
-  p1->set_max_range(m_MappingConfig.adaptive_voxel_filter_.max_range);
-  //   p->set_allocated_adaptive_voxel_filter_options(p1);
+
+void SetAdaptiveVoxelFilterOptions(
+    const AdaptiveVoxelFilterConfig adaptive_voxel_filter_config,
+    AdaptiveVoxelFilterOptions *adaptive_voxel_filter_options) {
+  adaptive_voxel_filter_options->set_max_length(
+      adaptive_voxel_filter_config.max_length);
+  adaptive_voxel_filter_options->set_min_num_points(
+      adaptive_voxel_filter_config.min_num_points);
+  adaptive_voxel_filter_options->set_max_range(
+      adaptive_voxel_filter_config.max_range);
 }
-void GetLoopClosureAdaptiveVoxelFilterOptions(
-    LocalTrajectoryBuilderOptions2D *p,
-    const CartoMappingConfig &m_MappingConfig) {
-  // 1.2闭环检测的自适应体素滤波器
-  ::cartographer::sensor::proto::AdaptiveVoxelFilterOptions *p1 =
-      p->mutable_loop_closure_adaptive_voxel_filter_options();
-  p1->set_min_num_points(
-      m_MappingConfig.loop_closure_adaptive_voxel_filter_.min_num_points);
-  p1->set_max_length(
-      m_MappingConfig.loop_closure_adaptive_voxel_filter_.max_length);
-  p1->set_max_range(
-      m_MappingConfig.loop_closure_adaptive_voxel_filter_.max_range);
-  //   p->set_allocated_loop_closure_adaptive_voxel_filter_options(p1);
+
+void SetLoopClosureAdaptiveVoxelFilterOptions(
+    const LoopClosureAdaptiveVoxelFilterConfig
+        loop_closure_adaptive_voxel_filter_config,
+    AdaptiveVoxelFilterOptions *loop_closure_adaptive_voxel_filter_options) {
+  loop_closure_adaptive_voxel_filter_options->set_max_length(
+      loop_closure_adaptive_voxel_filter_config.max_length);
+  loop_closure_adaptive_voxel_filter_options->set_min_num_points(
+      loop_closure_adaptive_voxel_filter_config.min_num_points);
+  loop_closure_adaptive_voxel_filter_options->set_max_range(
+      loop_closure_adaptive_voxel_filter_config.max_range);
 }
-void GetRtCsmOptions(LocalTrajectoryBuilderOptions2D *p,
-                     const CartoMappingConfig &m_MappingConfig) {
-  // 1.3 real_time_correlative_scan_matcher_
-  p->set_use_online_correlative_scan_matching(
-      m_MappingConfig.use_online_correlative_scan_matching);
-  ::cartographer::mapping::scan_matching::proto::
-      RealTimeCorrelativeScanMatcherOptions *p1 =
-          p->mutable_real_time_correlative_scan_matcher_options();
-  p1->set_linear_search_window(
-      m_MappingConfig.real_time_correlative_scan_matcher_.linear_search_window);
-  p1->set_angular_search_window(
-      m_MappingConfig.real_time_correlative_scan_matcher_
-          .angular_search_window);
-  p1->set_translation_delta_cost_weight(
-      m_MappingConfig.real_time_correlative_scan_matcher_
-          .translation_delta_cost_weight);
-  p1->set_rotation_delta_cost_weight(
-      m_MappingConfig.real_time_correlative_scan_matcher_
-          .rotation_delta_cost_weight);
-  //   p->set_allocated_real_time_correlative_scan_matcher_options(p1);
+
+void SetRealTimeCorrelativeScanMatcherOptions(
+    const RealTimeCorrelativeScanMatcherConfig
+        real_time_correlative_scan_matcher_config,
+    RealTimeCorrelativeScanMatcherOptions
+        *real_time_correlative_scan_matcher_options) {
+  real_time_correlative_scan_matcher_options->set_linear_search_window(
+      real_time_correlative_scan_matcher_config.linear_search_window);
+  real_time_correlative_scan_matcher_options->set_angular_search_window(
+      real_time_correlative_scan_matcher_config.angular_search_window);
+  real_time_correlative_scan_matcher_options->set_translation_delta_cost_weight(
+      real_time_correlative_scan_matcher_config.translation_delta_cost_weight);
+  real_time_correlative_scan_matcher_options->set_rotation_delta_cost_weight(
+      real_time_correlative_scan_matcher_config.rotation_delta_cost_weight);
 }
-void GetCeresScanMatcherOptions(LocalTrajectoryBuilderOptions2D *p,
-                                const CartoMappingConfig &m_MappingConfig) {
-  // 1.4 -- ceres匹配的一些配置参数
-  ::cartographer::mapping::scan_matching::proto::CeresScanMatcherOptions2D *p1 =
-      p->mutable_ceres_scan_matcher_options();
-  p1->set_occupied_space_weight(
-      m_MappingConfig.ceres_scan_matcher_front_.occupied_space_weight);
-  p1->set_translation_weight(
-      m_MappingConfig.ceres_scan_matcher_front_.translation_weight);
-  p1->set_rotation_weight(
-      m_MappingConfig.ceres_scan_matcher_front_.rotation_weight);
-  ::cartographer::common::proto::CeresSolverOptions *ceres_solver =
-      p1->mutable_ceres_solver_options();
-  ceres_solver->set_use_nonmonotonic_steps(
-      m_MappingConfig.ceres_scan_matcher_front_.use_nonmonotonic_steps);
-  ceres_solver->set_max_num_iterations(
-      m_MappingConfig.ceres_scan_matcher_front_.max_num_iterations);
-  ceres_solver->set_num_threads(
-      m_MappingConfig.ceres_scan_matcher_front_.num_threads);
-  //   p1->set_allocated_ceres_solver_options(ceres_solver);
-  //   p->set_allocated_ceres_scan_matcher_options(p1);
+
+void SetCeresScanMatcherOptions(
+    const CeresScanMatcherConfig ceres_scan_matcher_config,
+    CeresScanMatcherOptions2D *ceres_scan_matcher_options) {
+  ceres_scan_matcher_options->set_occupied_space_weight(
+      ceres_scan_matcher_config.occupied_space_weight);
+  ceres_scan_matcher_options->set_translation_weight(
+      ceres_scan_matcher_config.translation_weight);
+  ceres_scan_matcher_options->set_rotation_weight(
+      ceres_scan_matcher_config.rotation_weight);
+  auto *ceres_slover_options =
+      ceres_scan_matcher_options->mutable_ceres_solver_options();
 }
-void GetMotionFilterOptions(LocalTrajectoryBuilderOptions2D *p,
-                            const CartoMappingConfig &m_MappingConfig) {
-  // 1.5 为了防止子图里插入太多数据, motion_filter_
-  ::cartographer::mapping::proto::MotionFilterOptions *p1 =
-      p->mutable_motion_filter_options();
-  p1->set_max_time_seconds(m_MappingConfig.motion_filter_.max_time_seconds);
-  p1->set_max_distance_meters(
-      m_MappingConfig.motion_filter_.max_distance_meters);
-  p1->set_max_angle_radians(m_MappingConfig.motion_filter_.max_angle_radians);
-  //   p->set_allocated_motion_filter_options(p1);
+
+void SetCeresSolverOptions(const CeresSolverConfig ceres_slover_config,
+                           CeresSolverOptions *ceres_slover_options) {
+  ceres_slover_options->set_use_nonmonotonic_steps(
+      ceres_slover_config.use_nonmonotonic_steps);
+  ceres_slover_options->set_max_num_iterations(
+      ceres_slover_config.max_num_iterations);
+  ceres_slover_options->set_num_threads(ceres_slover_config.num_threads);
 }
-void GetPoseExp(LocalTrajectoryBuilderOptions2D *p,
-                const CartoMappingConfig &m_MappingConfig) {
-  // 1.6 位姿预测器  pose_extrapolator_
-  ::cartographer::mapping::proto::PoseExtrapolatorOptions *p1 =
-      p->mutable_pose_extrapolator_options();
-  p1->set_use_imu_based(m_MappingConfig.pose_extrapolator_.use_imu_based);
-  ::cartographer::mapping::proto::ConstantVelocityPoseExtrapolatorOptions
-      *Constant_Velocity_ = p1->mutable_constant_velocity();
-  Constant_Velocity_->set_imu_gravity_time_constant(
-      m_MappingConfig.pose_extrapolator_.imu_gravity_time_constant);
-  Constant_Velocity_->set_pose_queue_duration(
-      m_MappingConfig.pose_extrapolator_.pose_queue_duration);
-  //   p1->set_allocated_constant_velocity(Constant_Velocity_);
-  ::cartographer::mapping::proto::ImuBasedPoseExtrapolatorOptions *Imu_based_ =
-      p1->mutable_imu_based();
-  Imu_based_->set_pose_queue_duration(
-      m_MappingConfig.pose_extrapolator_.pose_queue_duration_);
-  Imu_based_->set_gravity_constant(
-      m_MappingConfig.pose_extrapolator_.gravity_constant);
-  Imu_based_->set_pose_translation_weight(
-      m_MappingConfig.pose_extrapolator_.pose_translation_weight);
-  Imu_based_->set_pose_rotation_weight(
-      m_MappingConfig.pose_extrapolator_.pose_rotation_weight);
-  Imu_based_->set_imu_acceleration_weight(
-      m_MappingConfig.pose_extrapolator_.imu_acceleration_weight);
-  Imu_based_->set_imu_rotation_weight(
-      m_MappingConfig.pose_extrapolator_.imu_rotation_weight);
-  Imu_based_->set_odometry_translation_weight(
-      m_MappingConfig.pose_extrapolator_.odometry_translation_weight);
-  Imu_based_->set_odometry_rotation_weight(
-      m_MappingConfig.pose_extrapolator_.odometry_rotation_weight);
-  //   p1->set_allocated_imu_based(Imu_based_);
-  ::cartographer::common::proto::CeresSolverOptions *Solver_options_ =
-      Imu_based_->mutable_solver_options();
-  Solver_options_->set_use_nonmonotonic_steps(
-      m_MappingConfig.pose_extrapolator_.use_nonmonotonic_steps);
-  Solver_options_->set_max_num_iterations(
-      m_MappingConfig.pose_extrapolator_.max_num_iterations);
-  Solver_options_->set_num_threads(
-      m_MappingConfig.pose_extrapolator_.num_threads);
-  //   Imu_based_->set_allocated_solver_options(Solver_options_);
-  //   p->set_allocated_pose_extrapolator_options(p1);
+
+void SetMotionFilterOptions(const MotionFilterConfig montion_filter_config,
+                            MotionFilterOptions *montion_filter_options) {
+  montion_filter_options->set_max_time_seconds(
+      montion_filter_config.max_time_seconds);
+  montion_filter_options->set_max_distance_meters(
+      montion_filter_config.max_distance_meters);
+  montion_filter_options->set_max_angle_radians(
+      montion_filter_config.max_angle_radians);
 }
-void GetSubMapOptions(LocalTrajectoryBuilderOptions2D *p,
-                      const CartoMappingConfig &m_MappingConfig) {
-  ::cartographer::mapping::proto::SubmapsOptions2D *p1 =
-      p->mutable_submaps_options();
-  p1->set_num_range_data(m_MappingConfig.submaps_.num_range_data);
-  ::cartographer::mapping::proto::GridOptions2D *Grid_Options_2d =
-      p1->mutable_grid_options_2d();
-  Grid_Options_2d->set_grid_type(
-      (::cartographer::mapping::proto::GridOptions2D_GridType)
-          m_MappingConfig.submaps_.grid_type);
-  // 传入的参数类型::cartographer::mapping::proto::GridOptions2D_GridType
-  Grid_Options_2d->set_resolution(m_MappingConfig.submaps_.resolution);
-  //   p1->set_allocated_grid_options_2d(Grid_Options_2d);
-  ::cartographer::mapping::proto::RangeDataInserterOptions
-      *Range_data_inserter_options_ = p1->mutable_range_data_inserter_options();
-  Range_data_inserter_options_->set_range_data_inserter_type(
-      (::cartographer::mapping::proto::
-           RangeDataInserterOptions_RangeDataInserterType)
-          m_MappingConfig.submaps_.range_data_inserter_type);
-  //强制类型转换
-  //   p1->set_allocated_range_data_inserter_options(Range_data_inserter_options_);
-  ::cartographer::mapping::proto::ProbabilityGridRangeDataInserterOptions2D
-      *probability_grid_range_data_inserter_options_2d =
-          Range_data_inserter_options_
-              ->mutable_probability_grid_range_data_inserter_options_2d();
-  probability_grid_range_data_inserter_options_2d->set_hit_probability(
-      m_MappingConfig.submaps_.hit_probability);
-  probability_grid_range_data_inserter_options_2d->set_miss_probability(
-      m_MappingConfig.submaps_.miss_probability);
-  probability_grid_range_data_inserter_options_2d->set_insert_free_space(
-      m_MappingConfig.submaps_.insert_free_space);
-  //   Range_data_inserter_options_
-  //       ->set_allocated_probability_grid_range_data_inserter_options_2d(
-  //           probability_grid_range_data_inserter_options_2d);
-  //   p->set_allocated_submaps_options(p1);
+
+void SetPoseExtrapolatorOptions(
+    const PoseExtrapolatorConfig pose_extrapolator_config,
+    PoseExtrapolatorOptions *pose_extrapolator_options) {
+  pose_extrapolator_options->set_use_imu_based(
+      pose_extrapolator_config.use_imu_based);
+  pose_extrapolator_options->mutable_constant_velocity()
+      ->set_imu_gravity_time_constant(
+          pose_extrapolator_config.constant_velocity_config
+              .imu_gravity_time_constant);
+  auto *imu_based_options = pose_extrapolator_options->mutable_imu_based();
+  SetImuBasedOptions(pose_extrapolator_config.imu_based_config,
+                     imu_based_options);
+}
+
+void SetImuBasedOptions(const ImuBasedConfig imu_based_config,
+                        ImuBasedPoseExtrapolatorOptions *imu_based_options) {
+  imu_based_options->set_pose_queue_duration(
+      imu_based_config.pose_queue_duration);
+  imu_based_options->set_gravity_constant(imu_based_config.gravity_constant);
+  imu_based_options->set_pose_translation_weight(
+      imu_based_config.pose_translation_weight);
+  imu_based_options->set_pose_rotation_weight(
+      imu_based_config.pose_rotation_weight);
+  imu_based_options->set_imu_acceleration_weight(
+      imu_based_config.imu_acceleration_weight);
+  imu_based_options->set_imu_rotation_weight(
+      imu_based_config.imu_rotation_weight);
+  imu_based_options->set_odometry_translation_weight(
+      imu_based_config.odometry_translation_weight);
+  imu_based_options->set_odometry_rotation_weight(
+      imu_based_config.odometry_rotation_weight);
+  auto *ceres_solver_options = imu_based_options->mutable_solver_options();
+  SetCeresSolverOptions(imu_based_config.ceres_solver_config,
+                        ceres_solver_options);
+}
+
+void SetSubmapOptions(const SubmapConfig submap_config,
+                      SubmapsOptions2D *submap_options) {
+  submap_options->set_num_range_data(submap_config.num_range_data);
+  submap_options->mutable_grid_options_2d()->set_grid_type(
+      (::cartographer::mapping::proto::GridOptions2D_GridType)(
+          submap_config.grid_type));
+  submap_options->mutable_grid_options_2d()->set_resolution(
+      submap_config.resolution);
+  auto *range_data_inserter_options =
+      submap_options->mutable_range_data_inserter_options();
+}
+
+void SetRangeDataInserterOptions(
+    const RangeDataInserterConfig range_data_inserter_config,
+    RangeDataInserterOptions *range_data_inserter_options) {
+  range_data_inserter_options->set_range_data_inserter_type(
+      (RangeDataInserterOptions_RangeDataInserterType)
+          range_data_inserter_config.range_data_inserter_type);
+  auto *probability_grid_range_data_inserter_options =
+      range_data_inserter_options
+          ->mutable_probability_grid_range_data_inserter_options_2d();
+  SetProbabilityGridRangeDataInserterOptions2D(
+      range_data_inserter_config.probability_grid_range_data_inserter_config,
+      probability_grid_range_data_inserter_options);
+
+  auto *tsdf_range_data_inserter_options =
+      range_data_inserter_options
+          ->mutable_tsdf_range_data_inserter_options_2d();
+  SetTSDFRangeDataInserterOptions2D(
+      range_data_inserter_config.tsdf_range_data_inserter_config,
+      tsdf_range_data_inserter_options);
+}
+
+void SetProbabilityGridRangeDataInserterOptions2D(
+    const ProbabilityGridRangeDataInserterConfig config,
+    ProbabilityGridRangeDataInserterOptions2D *options) {
+  options->set_insert_free_space(config.insert_free_space);
+  options->set_hit_probability(config.hit_probability);
+  options->set_miss_probability(config.miss_probability);
+}
+
+void SetTSDFRangeDataInserterOptions2D(
+    const TsdfRangeDataInserterConfig config,
+    TSDFRangeDataInserterOptions2D *options) {
+  options->set_truncation_distance(config.truncation_distance);
+  options->set_maximum_weight(config.maximum_weight);
+  options->set_update_free_space(config.update_free_space);
+  options->mutable_normal_estimation_options()->set_num_normal_samples(
+      config.num_normal_samples);
+  options->mutable_normal_estimation_options()->set_sample_radius(
+      config.sample_radius);
+  options->set_project_sdf_distance_to_scan_normal(
+      config.project_sdf_distance_to_scan_normal);
+  options->set_update_weight_range_exponent(
+      config.update_weight_range_exponent);
+  options->set_update_weight_angle_scan_normal_to_ray_kernel_bandwidth(
+      config.update_weight_angle_scan_normal_to_ray_kernel_bandwidth);
+  options->set_update_weight_distance_cell_to_hit_kernel_bandwidth(
+      config.update_weight_distance_cell_to_hit_kernel_bandwidth);
+}
+
+void SetPoseGraphOptions(const PoseGraphConfig pose_graph_config,
+                         PoseGraphOptions *pose_graph_options) {
+  pose_graph_options->set_optimize_every_n_nodes(
+      pose_graph_config.optimize_every_n_nodes);
+  auto *constraint_builder_options =
+      pose_graph_options->mutable_constraint_builder_options();
+  SetConstraintBuilderOptions(pose_graph_config.constraint_builder_config,
+                              constraint_builder_options);
+  pose_graph_options->set_matcher_translation_weight(
+      pose_graph_config.matcher_translation_weight);
+  pose_graph_options->set_matcher_rotation_weight(
+      pose_graph_config.matcher_rotation_weight);
+  auto *optimization_problem =
+      pose_graph_options->mutable_optimization_problem_options();
+  SetOptimizationProblemOptions(pose_graph_config.optimization_problem_config,
+                                optimization_problem);
+  pose_graph_options->set_max_num_final_iterations(
+      pose_graph_config.max_num_final_iterations);
+  pose_graph_options->set_global_sampling_ratio(
+      pose_graph_config.global_sampling_ratio);
+  pose_graph_options->set_log_residual_histograms(
+      pose_graph_config.log_residual_histograms);
+  pose_graph_options->set_global_constraint_search_after_n_seconds(
+      pose_graph_config.global_constraint_search_after_n_seconds);
+}
+
+//约束构建的相关参数
+void SetConstraintBuilderOptions(const ConstraintBuilderConfig config,
+                                 ConstraintBuilderOptions *options) {
+  // 约束构建的相关参数
+  options->set_sampling_ratio(config.sampling_ratio);
+  options->set_max_constraint_distance(config.max_constraint_distance);
+  options->set_min_score(config.min_score);
+  options->set_global_localization_min_score(
+      config.global_localization_min_score);
+  options->set_loop_closure_translation_weight(
+      config.loop_closure_translation_weight);
+  options->set_loop_closure_rotation_weight(
+      config.loop_closure_rotation_weight);
+  options->set_log_matches(config.log_matches);
+  auto *fast_correlative_scan_matcher_options =
+      options->mutable_fast_correlative_scan_matcher_options();
+  SetFastCorrelativeScanMatcherOptions2DOptions(
+      config.fast_correlative_scan_matcher_config,
+      fast_correlative_scan_matcher_options);
+  auto *ceres_scan_matcher_options =
+      options->mutable_ceres_scan_matcher_options();
+  SetCeresScanMatcherOptions(config.ceres_scan_matcher_config,
+                             ceres_scan_matcher_options);
+}
+
+void SetFastCorrelativeScanMatcherOptions2DOptions(
+    const FastCorrelativeScanMatcherConfig config,
+    FastCorrelativeScanMatcherOptions2D *options) {
+  options->set_linear_search_window(config.linear_search_window);
+  options->set_angular_search_window(config.angular_search_window);
+  options->set_branch_and_bound_depth(config.branch_and_bound_depth);
+}
+
+void SetOptimizationProblemOptions(const OptimizationProblemConfig config,
+                                   OptimizationProblemOptions *options) {
+  options->set_huber_scale(config.huber_scale);
+  // 前端结果残差的权重
+  options->set_local_slam_pose_translation_weight(
+      config.local_slam_pose_translation_weight);
+  options->set_local_slam_pose_rotation_weight(
+      config.local_slam_pose_rotation_weight);
+  // 里程计残差的权重
+  options->set_odometry_translation_weight(config.odometry_translation_weight);
+  options->set_odometry_rotation_weight(config.odometry_rotation_weight);
+  // gps残差的权重
+  options->set_fixed_frame_pose_translation_weight(
+      config.fixed_frame_pose_translation_weight);
+  options->set_fixed_frame_pose_rotation_weight(
+      config.fixed_frame_pose_rotation_weight);
+  options->set_fixed_frame_pose_use_tolerant_loss(
+      config.fixed_frame_pose_use_tolerant_loss);
+  options->set_fixed_frame_pose_tolerant_loss_param_a(
+      config.fixed_frame_pose_tolerant_loss_param_a);
+  options->set_fixed_frame_pose_tolerant_loss_param_b(
+      config.fixed_frame_pose_tolerant_loss_param_b);
+  options->set_log_solver_summary(config.log_solver_summary);
+  options->set_use_online_imu_extrinsics_in_3d(
+      config.use_online_imu_extrinsics_in_3d);
+  options->set_fix_z_in_3d(config.fix_z_in_3d);
+  auto *ceres_scan_matcher_options = options->mutable_ceres_solver_options();
+  SetCeresSolverOptions(config.ceres_solver_config, ceres_scan_matcher_options);
 }
 
 }  // namespace mapping_and_location

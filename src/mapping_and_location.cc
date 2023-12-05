@@ -5,8 +5,9 @@
  * @LastEditTime: 2023-03-30 02:55:17
  */
 #include "include/mapping_and_location/mapping_and_location.h"
-
 #include "include/mapping_and_location_impl.h"
+#include "include/config_struct.h"
+#include "include/common/load_config.h"
 
 namespace gomros {
 namespace data_process {
@@ -17,14 +18,17 @@ namespace mapping_and_location {
  *
  * @param config
  */
-MappingAndLocation::MappingAndLocation(const KartoAndGridConfig &config) {
-  impl_ = std::make_shared<MappingAndLocationImpl>(config);
+MappingAndLocation::MappingAndLocation(std::string config_dir) {
+  DefaultWriteMappingAndLocationConfig(config_dir);
+  MappingAndLocationConfig config;
+  if (ReadMappingAndLocationConfig(config_dir, &config)) {
+    impl_ = std::make_shared<MappingAndLocationImpl>(config);
+  } else {
+    std::cout << "配置文件加載失败！！！！！！" << std::endl;
+  }
+  
 }
 
-MappingAndLocation::MappingAndLocation(const CartoAndGridConfig &config) {
-  impl_ = std::make_shared<MappingAndLocationImpl>(config);
-  //在MappingAndLocation类中创建MappingAndLocationImpl类的指针
-}
 /**
  * @brief Destroy the Mapping And Location:: Mapping And Location object
  *
@@ -32,15 +36,6 @@ MappingAndLocation::MappingAndLocation(const CartoAndGridConfig &config) {
 MappingAndLocation::~MappingAndLocation() {}
 
 
-
-/**
- * @brief 设置配置参数函数
- *
- * @param config 要设定的Carto配置参数结构体
- */
-void MappingAndLocation::SetConfiguration(const CartoAndGridConfig &config) {
-  impl_->SetConfiguration(config);
-}
 
 /**
  * @brief 从文件加载初始位姿函数

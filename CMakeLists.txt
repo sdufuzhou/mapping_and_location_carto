@@ -23,24 +23,25 @@ elseif(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "x86_64")
     set(3rdparty_lib ${CMAKE_CURRENT_SOURCE_DIR}/../../3rdparty/x86_64/lib)
 endif()
 
-# Find required packages
-# set(GLOG_ROOT "/usr/local")
-# LIST(APPEND CMAKE_MODULE_PATH /usr/local/stow/absl/lib/cmake/glog)
-# LIST(APPEND CMAKE_MODULE_PATH /usr/local/lib/cmake/glog)
-# find_package(glog REQUIRED)
-message("#########GLOG_INCLUDE_DIRS=${GLOG_INCLUDE_DIRS}")
-message("########GLOG_LIBRARIES=${GLOG_LIBRARIES}")
 
-list(APPEND REQUIRED_PACKAGES PCL Ceres Boost Eigen3 Protobuf Lua GFlags GTest)
-message("#########GLOG_INCLUDE_DIRS=${GLOG_INCLUDE_DIRS}")
-message("########GLOG_LIBRARIES=${GLOG_LIBRARIES}")
+find_package(PCL REQUIRED)
+find_package(Ceres REQUIRED)
+find_package(Boost REQUIRED)
+find_package(Eigen3 REQUIRED)
+find_package(Lua REQUIRED)
+find_package(GFlags REQUIRED)
+find_package(GTest REQUIRED)
+find_package(glog REQUIRED)
 find_package(absl REQUIRED )
-message("#########GLOG_INCLUDE_DIRS=${GLOG_INCLUDE_DIRS}")
-message("########GLOG_LIBRARIES=${GLOG_LIBRARIES}")
-foreach(PACKAGE ${REQUIRED_PACKAGES})
-    find_package(${PACKAGE} REQUIRED)
-    message("Found ${PACKAGE} at ${${PACKAGE}_INCLUDE_DIRS}")
-endforeach()
+find_package(Protobuf REQUIRED)
+message("#################Found Protobuf at ${PROTOBUF_INCLUDE_DIR}")
+message("#################Found ceres at ${CERES_INCLUDE_DIRS}")
+# list(APPEND REQUIRED_PACKAGES PCL Ceres Boost Eigen3 Protobuf Lua GFlags GTest)
+# find_package(absl REQUIRED )
+# foreach(PACKAGE ${REQUIRED_PACKAGES})
+#     find_package(${PACKAGE} REQUIRED)
+#     message("#################Found ${PACKAGE} at ${${PACKAGE}_INCLUDE_DIRS}")
+# endforeach()
 
 
 
@@ -66,7 +67,9 @@ include_directories(
 # Source files
 file(GLOB_RECURSE PLUGIN_SRC "src/*.cc")
 file(GLOB_RECURSE PLUGIN_PUBLIC_H "include/${PACKAGE_NAME}/*")
-
+message("#######################")
+message("PROTOBUF_LIBRARY = ${PROTOBUF_LIBRARY}")
+message("#######################")
 # Define the library
 add_library(${PACKAGE_NAME} SHARED ${PLUGIN_SRC})
 
@@ -118,4 +121,4 @@ install(TARGETS ${PACKAGE_NAME} DESTINATION ${CMAKE_INSTALL_LIBDIR}
 set(CMAKE_CXX_FLAGS "-std=c++14 -g -O0 -fprofile-arcs -ftest-coverage")
 
 # Unit tests
-# add_subdirectory(test)
+add_subdirectory(test)
