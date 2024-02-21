@@ -8,7 +8,7 @@
 #include "include/mapping_and_location_impl.h"
 #include "include/config_struct.h"
 #include "include/common/load_config.h"
-
+#include <iostream>
 namespace gomros {
 namespace data_process {
 namespace mapping_and_location {
@@ -19,9 +19,10 @@ namespace mapping_and_location {
  * @param config
  */
 MappingAndLocation::MappingAndLocation(std::string config_dir) {
-  DefaultWriteMappingAndLocationConfig(config_dir);
+  // DefaultWriteMappingAndLocationConfig(config_dir);
   MappingAndLocationConfig config;
   if (ReadMappingAndLocationConfig(config_dir, &config)) {
+    std::cout <<"#######括号内返回为真"<<std::endl;
     impl_ = std::make_shared<MappingAndLocationImpl>(config);
   } else {
     std::cout << "配置文件加載失败！！！！！！" << std::endl;

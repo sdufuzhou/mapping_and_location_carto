@@ -1,5 +1,6 @@
 #include "include/mapping_lib/carto_mapping/create_options.h"
 #include <iostream>
+#include "include/common/logger.h"
 namespace gomros {
 namespace data_process {
 namespace mapping_and_location {
@@ -23,9 +24,11 @@ cartographer::mapping::proto::MapBuilderOptions GetMapBuilderOptions(
 }
 
 cartographer::mapping::proto::TrajectoryBuilderOptions
-GetTrajectoryBuilderOptions(const TrajectoryBuilderConfig& trajectory_builder_config) {
-    cartographer::mapping::proto::TrajectoryBuilderOptions trajectory_builder_options;
-    trajectory_builder_options.set_collate_fixed_frame(
+GetTrajectoryBuilderOptions(
+    const TrajectoryBuilderConfig &trajectory_builder_config) {
+  cartographer::mapping::proto::TrajectoryBuilderOptions
+      trajectory_builder_options;
+  trajectory_builder_options.set_collate_fixed_frame(
       trajectory_builder_config.collate_fixed_frame);
   trajectory_builder_options.set_collate_landmarks(
       trajectory_builder_config.collate_landmarks);
@@ -69,6 +72,9 @@ GetTrajectoryBuilderOptions(const TrajectoryBuilderConfig& trajectory_builder_co
   SetCeresScanMatcherOptions(
       trajectory_builder_config.ceres_scan_matcher_config,
       ceres_scan_matcher_options);
+  LOG_WARN << "######trajectory_builder_config.ceres_scan_matcher_config:"
+           << trajectory_builder_config.ceres_scan_matcher_config
+                  .occupied_space_weight;
   auto *motion_filter_options =
       trajectory_builder_2d_options->mutable_motion_filter_options();
   SetMotionFilterOptions(trajectory_builder_config.motion_filter_config,
@@ -134,6 +140,8 @@ void SetCeresScanMatcherOptions(
       ceres_scan_matcher_config.rotation_weight);
   auto *ceres_slover_options =
       ceres_scan_matcher_options->mutable_ceres_solver_options();
+  SetCeresSolverOptions(ceres_scan_matcher_config.ceres_solver_config,
+                        ceres_slover_options);
 }
 
 void SetCeresSolverOptions(const CeresSolverConfig ceres_slover_config,
@@ -201,6 +209,8 @@ void SetSubmapOptions(const SubmapConfig submap_config,
       submap_config.resolution);
   auto *range_data_inserter_options =
       submap_options->mutable_range_data_inserter_options();
+  SetRangeDataInserterOptions(submap_config.range_data_inserter_config,
+                              range_data_inserter_options);
 }
 
 void SetRangeDataInserterOptions(
@@ -209,6 +219,8 @@ void SetRangeDataInserterOptions(
   range_data_inserter_options->set_range_data_inserter_type(
       (RangeDataInserterOptions_RangeDataInserterType)
           range_data_inserter_config.range_data_inserter_type);
+  SLAM_INFO("range_data_inserter_type为：%d\n",
+            range_data_inserter_config.range_data_inserter_type);
   auto *probability_grid_range_data_inserter_options =
       range_data_inserter_options
           ->mutable_probability_grid_range_data_inserter_options_2d();

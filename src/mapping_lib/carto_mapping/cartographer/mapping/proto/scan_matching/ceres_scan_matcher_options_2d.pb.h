@@ -205,7 +205,7 @@ inline double CeresScanMatcherOptions2D::occupied_space_weight() const {
   return occupied_space_weight_;
 }
 inline void CeresScanMatcherOptions2D::set_occupied_space_weight(double value) {
-  
+
   occupied_space_weight_ = value;
   // @@protoc_insertion_point(field_set:cartographer.mapping.scan_matching.proto.CeresScanMatcherOptions2D.occupied_space_weight)
 }

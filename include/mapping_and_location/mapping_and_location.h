@@ -7,7 +7,6 @@
 #pragma once
 #include <memory>
 #include <string>
-
 #include "message_lib/position_message.h"//在大工程里
 namespace gomros {
 namespace data_process {

@@ -269,10 +269,10 @@ bool MappingManagerImpl::StartMapping() {
   if (device_state_->mcChassisState == SYSTEM_STATE_MAPPING) {
     SLAM_ERROR("建图指令错误，当前正在开始建图中......\n");
     return false;
-  } else if (device_state_->mcChassisState == SYSTEM_STATE_LOCATING ||
-             device_state_->mcChassisState == SYSTEM_STATE_INIT_POSE) {
-    SLAM_ERROR("建图指令错误，当前正在定位中，不能建图......\n");
-    return false;
+  // } else if (device_state_->mcChassisState == SYSTEM_STATE_LOCATING ||
+  //            device_state_->mcChassisState == SYSTEM_STATE_INIT_POSE) {
+  //   SLAM_ERROR("建图指令错误，当前正在定位中，不能建图......\n");
+  //   return false;
   }
 
   // 重置建图里程计

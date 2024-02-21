@@ -72,7 +72,6 @@ MappingAndLocationImpl::MappingAndLocationImpl(
   CallBackEvent start_mapping_event{this, StartMappingCallBack};
   node_->SubscribeTopic(config.sub_start_mapping_cmd_topic,
                         start_mapping_event);
-
   CallBackEvent stop_mapping_event{this, StopMappingCallBack};
   node_->SubscribeTopic(config.sub_stop_mapping_cmd_topic, stop_mapping_event);
 
@@ -297,25 +296,26 @@ void MappingAndLocationImpl::LoadMapNameFromFile() {
   std::string data_string;
   std::string map_config_full_path =
       connfig_.carto_config.map_config_file_path + "/" + "map_config.json";
-  if (JsonRead(map_config_full_path.c_str(), &data_string)) {
-    Json::Reader reader;
-    Json::Value data_json;
-    if (!reader.parse(data_string, data_json)) {
-      SLAM_ERROR("###解析地图配置数据错误\n");
-      map_file_full_path_ =
-          connfig_.carto_config.map_data_file_path + "/" + "ale.smap";
-      return;
-    } else {
-      map_file_full_path_ = connfig_.carto_config.map_data_file_path + "/" +
-                            data_json["defaultMap"].asString();
-    }
-  } else {
-    SLAM_ERROR("###打开地图配置文件失败\n");
-    map_file_full_path_ =
-        connfig_.carto_config.map_data_file_path + "/" + "ale.smap";
-    return;
-  }
-  SLAM_INFO("加载到的默认地图全路径为%s\n", map_file_full_path_.c_str());
+  // if (JsonRead(map_config_full_path.c_str(), &data_string)) {
+  //   Json::Reader reader;
+  //   Json::Value data_json;
+  //   if (!reader.parse(data_string, data_json)) {
+  //     SLAM_ERROR("###解析地图配置数据错误\n");
+  //     map_file_full_path_ =
+  //         connfig_.location_config.init_pose_file_path + "/" + "ale.smap";
+  //     return;
+  //   } else {
+  //     map_file_full_path_ = connfig_.carto_config.map_data_file_path + "/" +
+  //                           data_json["defaultMap"].asString();
+  //   }
+  // } else {
+  //   SLAM_ERROR("###打开地图配置文件失败\n");
+  //   map_file_full_path_ =
+  //       connfig_.carto_config.map_data_file_path + "/" + "ale.smap";
+  //   return;
+  // }
+   map_file_full_path_ ="./map/ale.smap";
+  // SLAM_INFO("加载到的默认地图全路径为%s\n", map_file_full_path_.c_str());
 }
 
 void *MappingAndLocationImpl::SendPose(void *ptr) {

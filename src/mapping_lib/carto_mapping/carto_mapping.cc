@@ -20,15 +20,10 @@ CartoMapping::CartoMapping(const CartoMappingConfig &config) {
   laser_min_angle_ = config_.mapping_start_angle / 180.0 * M_PI;
   laser_max_angle_ = config_.mapping_end_angle / 180.0 * M_PI;
   laser_resolution_ = config_.radar_resolution / 180.0 * M_PI;
-
-  // //  这两个用的是carto里自带的参数
-  // laser_max_range_ = config_.max_range;
-  // laser_min_range_ = config_.min_range;
 }
 CartoMapping::~CartoMapping() {}
 
-void CartoMapping::SetConfiguration(void *config) {
-}
+void CartoMapping::SetConfiguration(void *config) {}
 void CartoMapping::StartMapping() {
   // 共同的
   finish_mapping_ = false;
@@ -39,7 +34,6 @@ void CartoMapping::StartMapping() {
   if (!offline_mapping_) {
     CreatCartoModule();
   }
-  // SLAM_DEBUG("创建三个处理数据(包含在线或者离线)线程\n"),以前版本
   // 调用
   std::thread th(std::bind(&CartoMapping::HandleTimeQueue, this));
   th.detach();
@@ -52,7 +46,6 @@ void CartoMapping::StopMapping(std::string map_name) {
   th.detach();
 }
 void CartoMapping::FinishMapping() {
-  // SLAM_DEBUG("等待结束建图\n");
   uint64_t t1 = gomros::common::GetCurrentTime_us();
   std::unique_lock<std::mutex> locker(time_queue_mtx_);
   add_data_ = false;  // 此时也不再往list容器中添加数据了
@@ -109,15 +102,17 @@ void CartoMapping::FinishMapping() {
         case 1:
           OdomDataConversionAndAddFunc(odom_list_from_file_.front());
           odom_list_from_file_.pop_front();
+          LOG_INFO << "剩余" << odom_list_from_file_.size() << "帧里程计数据\n";
           break;
         case 2:
-          // radar_count++;
           LaserDataConversionAndAddFunc(lidar_list_from_file_.front());
           lidar_list_from_file_.pop_front();
+          LOG_INFO << "剩余" << lidar_list_from_file_.size() << "帧雷达数据\n";
           break;
         case 3:
           ImuDataConversionAndAddFunc(imu_list_from_file_.front());
           imu_list_from_file_.pop_front();
+          LOG_INFO << "剩余" << imu_list_from_file_.size() << "帧IMU数据\n";
           break;
         default:
           LOG_ERROR << "数据类型错误";
@@ -179,12 +174,14 @@ void CartoMapping::HandleLaserData(const RadarSensoryMessage &data) {
     laser_max_angle_ = fmod(laser_max_angle_ + 5 * M_PI, 2 * M_PI) - M_PI;
     // if (laser_min_range_ <
     //     data.mstruRadarMessage.mstruRadarHeaderData.mfRangeMin) {
-    //   laser_min_range_ = data.mstruRadarMessage.mstruRadarHeaderData.mfRangeMin;
+    //   laser_min_range_ =
+    //   data.mstruRadarMessage.mstruRadarHeaderData.mfRangeMin;
     //   SLAM_ERROR("建图模块配置文件雷达最小使用距离小于雷达数据最小距离\n");
     // }
     // if (laser_max_range_ >
     //     data.mstruRadarMessage.mstruRadarHeaderData.mfRangeMax) {
-    //   laser_max_range_ = data.mstruRadarMessage.mstruRadarHeaderData.mfRangeMax;
+    //   laser_max_range_ =
+    //   data.mstruRadarMessage.mstruRadarHeaderData.mfRangeMax;
     //   SLAM_ERROR("建图模块配置文件雷达最大使用距离大于雷达数据最大距离\n");
     // }
     SLAM_DEBUG(
@@ -223,7 +220,7 @@ void CartoMapping::HandleImuData(const ImuSensoryMessage &data) {
 }
 
 void CartoMapping::HandleTimeQueue() {
-  // 创建激光数据离线存储文件
+  // 创建激光数据离线存储文件夹及文件
   system("mkdir -p  data");  // 如果目录不存在，则创建该目录
   // 创建一个记录雷达数据的空文件，往文件里写入雷达数据（针对于离线建图）
   std::string str = " ";
@@ -259,6 +256,7 @@ void CartoMapping::HandleTimeQueue() {
   imu_file_open_ = true;
   handle_imu_finish_ = false;
 
+  //在这里重新置0可以实现：不重启程序时，多次点击开始建图，存入文件中的数据的索引依然从头开始
   record_index_radar_ = 0;
   record_index_odom_ = 0;
   record_index_imu_ = 0;
@@ -279,6 +277,8 @@ void CartoMapping::HandleTimeQueue() {
       lidar_list_.pop_front();
       time_locker.unlock();
       if (!offline_mapping_) {
+        record_index_radar_++;
+        SaveLaserDataToFile(laser_data);
         LaserDataConversionAndAddFunc(laser_data);
       } else {
         record_index_radar_++;
@@ -301,6 +301,8 @@ void CartoMapping::HandleTimeQueue() {
                                      y_, theta_);
       Position pose = wheel_odom * radar_install_inverse;
       if (!offline_mapping_) {
+        record_index_odom_++;
+        SaveOdomDataToFile(pose);
         OdomDataConversionAndAddFunc(pose);
       } else {
         record_index_odom_++;
@@ -313,6 +315,8 @@ void CartoMapping::HandleTimeQueue() {
       // imu解锁
       time_locker.unlock();
       if (!offline_mapping_) {
+        record_index_imu_++;
+        SaveImuDataToFile(imu_data);
         ImuDataConversionAndAddFunc(imu_data);
       } else {
         record_index_imu_++;
@@ -327,7 +331,6 @@ void CartoMapping::HandleTimeQueue() {
   radar_file_open_ = false;
   {
     std::unique_lock<std::mutex> locker(stop_mapping_mtx_);
-    locker.lock();
     handle_radar_finish_ = true;
     stop_mapping_cond_.notify_all();
     locker.unlock();
@@ -404,7 +407,7 @@ void CartoMapping::LaserDataConversionAndAddFunc(RadarSensoryMessage &data) {
     uint64_t t1 = gomros::common::GetCurrentTime_us();
     trajectory_builder_->AddSensorData("range0", ToCartoPointCloud(data));
     uint64_t t2 = gomros::common::GetCurrentTime_us();
-    // SLAM_DEBUG("添加一帧雷达数据耗时：%lu\n", t2 - t1);
+    SLAM_DEBUG("添加一帧雷达数据耗时：%lu\n", t2 - t1);
     last_data_time_ = data.mstruRadarMessage.mstruRadarHeaderData.mlTimeStamp;
   } else {
     SLAM_WARN("上一帧时间和当前时间:%lu     %lu\n", last_data_time_,
@@ -586,12 +589,9 @@ void CartoMapping::PaintMap() {
   SLAM_INFO("Paint map with width: %d %s %d %s %d\n", width, "height:", height,
             "resolution:", resolution);
   map_json["normalPosList"] = point_append;
-
-  // 创建文件夹并可以指定路径
+  // 没有就创建
   system("mkdir -p map");
-
   std::string full_map_data_path = config_.map_data_file_path + "/" + map_name_;
-
   // json_save(full_map_data_path.c_str(),map_json);(下面的代码就是json_save的实现)
   Json::StyledWriter style_writer;
   std::string str = style_writer.write(map_json);
@@ -604,7 +604,6 @@ void CartoMapping::PaintMap() {
           trunc);  // 第一个参数代表文件路径，第二个参数表示以什么样的方式打开
   if (!ofs.is_open()) {
     SLAM_ERROR("文件打开失败");
-    // system ("mkdir %s",config_.map_data_file_path.c_str());
     return;
   }
   ofs << str;
@@ -614,7 +613,8 @@ void CartoMapping::PaintMap() {
 void CartoMapping::CreatCartoModule() {
   // 传入的config_在构造函数中已经赋值，这里是两个函数的调用。
   auto map_builder_options = GetMapBuilderOptions(config_);
-  auto trajectory_builder_options = GetTrajectoryBuilderOptions(config_.trajectory_config);
+  auto trajectory_builder_options =
+      GetTrajectoryBuilderOptions(config_.trajectory_config);
   // 创建map_builder_
   map_builder_ =
       absl::make_unique<cartographer::mapping::MapBuilder>(map_builder_options);
@@ -698,7 +698,7 @@ cartographer::sensor::TimedPointCloudData CartoMapping::ToCartoPointCloud(
     minus_time += timestep;
   }
   uint64_t t2 = gomros::common::GetCurrentTime_us();
-  SLAM_INFO("转换一帧雷达数据中for循环的耗时：%lu\n", t2 - t1);
+  // SLAM_INFO("转换一帧雷达数据中for循环的耗时：%lu\n", t2 - t1);
 
   double dt = ((start_i *
                 data.mstruRadarMessage.mstruRadarHeaderData.mfTimeIncreament) +
@@ -708,11 +708,11 @@ cartographer::sensor::TimedPointCloudData CartoMapping::ToCartoPointCloud(
   cartographer::common::Time time = ToCartoTime(
       data.mstruRadarMessage.mstruRadarHeaderData.mlTimeStamp + lut);
   int64_t time2 = cartographer::common::ToUniversal(time);
-  SLAM_INFO("carto时间为 %ld\n", time2);
+  // SLAM_INFO("carto时间为 %ld\n", time2);
   double t = (timestep * (point_num - 1)) * 1000000;
-  SLAM_DEBUG("##########单帧时间增量 %f %f %f %d\n", t, timestep,
-             data.mstruRadarMessage.mstruRadarHeaderData.mfTimeIncreament,
-             stepIncreament_);
+  // SLAM_DEBUG("##########单帧时间增量 %f %f %f %d\n", t, timestep,
+  //            data.mstruRadarMessage.mstruRadarHeaderData.mfTimeIncreament,
+  //            stepIncreament_);
   return cartographer::sensor::TimedPointCloudData{
       time, Eigen::Vector3f(radar_x, radar_y, radar_theta),
       carto_data};  // 强度值取为空
@@ -730,15 +730,17 @@ cartographer::transform::Rigid3d CartoMapping::ToCartoRigid3d(Position &pose) {
   quaternion = yawAngle * pitchAngle * rollAngle;  // 分别表示三个四元数相乘
   return cartographer::transform::Rigid3d{translation, quaternion};
 }
+
 cartographer::sensor::ImuData CartoMapping::ToCartoImu(
     ImuSensoryMessage &data) {
   return cartographer::sensor::ImuData{
       ToCartoTime(data.time_stamp),  // 时间戳，单位：us
-      Eigen::Vector3d(0, 0, 9.8),
+      Eigen::Vector3d(0, 0, -9.8),
       // carto里，上面三个分量分别代表重力加速度在x,y,z方向上的分量，当机器人水平运动时,Z轴与重力加速度方向重合，
       // 在x,y方向上的投影都为0，在z方向上的分量为本身，
-      // 绕Z轴的旋转角速度，单位rad/s, 逆时针为正
+      
       Eigen::Vector3d(0., 0., -data.z_omega)};
+      // 绕Z轴的旋转角速度，单位rad/s, 逆时针为正
 }
 cartographer::common::Time CartoMapping::ToCartoTime(uint64_t timestamp_us) {
   return cartographer::common::FromUniversal(timestamp_us * 10);
@@ -777,7 +779,7 @@ void CartoMapping::ReadRadarData() {
       laser_data.mstruRadarMessage.mstruRadarHeaderData.mlTimeStamp =
           time_stamp;
       float time_increament = stof(laser_str[3]);
-      SLAM_ERROR("time_increament:%f \n", time_increament);
+      // SLAM_ERROR("time_increament:%f \n", time_increament)；
       laser_data.mstruRadarMessage.mstruRadarHeaderData.mfTimeIncreament =
           time_increament;
 
@@ -804,6 +806,7 @@ void CartoMapping::ReadRadarData() {
         // 使用empalce_back可以直接传入x,y.而不需要进行构造一个Vector2d类型的值
       }
       uint64_t t2 = gomros::common::GetCurrentTime_us();
+      //读出来的数据先全部放到一个容器中
       lidar_list_from_file_.push_back(laser_data);
     }
   } else {

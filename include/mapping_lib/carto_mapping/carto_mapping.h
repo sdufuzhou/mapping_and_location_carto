@@ -158,6 +158,7 @@ class CartoMapping : public MappingInterface {
   bool odom_file_open_ = false;
   bool imu_file_open_ = false;
 
+  //结束建图标志位
   bool finish_mapping_ = true;
 
   // 声明三个文件指针
@@ -170,7 +171,7 @@ class CartoMapping : public MappingInterface {
   std::list<ImuSensoryMessage> imu_lists_;
   std::list<OdometerMessage> odom_list_;
 
-  // 创建两个在读数据线程中存储从文件中读到的传感器数据的list容器
+  // 创建三个在读数据线程中存储从文件中读到的传感器数据的list容器
   std::list<RadarSensoryMessage> lidar_list_from_file_;
   std::list<Position> odom_list_from_file_;
   std::list<ImuSensoryMessage> imu_list_from_file_;
@@ -180,7 +181,6 @@ class CartoMapping : public MappingInterface {
 
   int trajectory_id_;
   bool offline_mapping_;
-  bool use_laser_;
   bool use_imu_;  // Carto里 有是否使用IMU的选择
   bool use_odom_;
   std::string map_name_;  // 地图名
