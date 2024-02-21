@@ -225,9 +225,8 @@ typedef struct PoseGraphCfg {
           matcher_translation_weight, matcher_rotation_weight,
           optimization_problem_config, max_num_final_iterations,
           global_sampling_ratio, log_residual_histograms,
-          global_constraint_search_after_n_seconds, max_num_final_iterations,
-          global_sampling_ratio, log_residual_histograms,
-          global_constraint_search_after_n_seconds));
+          global_constraint_search_after_n_seconds
+          ));
 } PoseGraphCfg;
 
 typedef struct TrajectoryBuilderCfg {

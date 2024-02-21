@@ -84,7 +84,7 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
         matching_result = local_trajectory_builder_->AddRangeData(
             sensor_id, timed_point_cloud_data);
 uint64_t t2 = gomros::common::GetCurrentTime_us();
-LOG_DEBUG << "扫描匹配耗时"<< t2 - t1;
+// LOG_DEBUG << "扫描匹配耗时"<< t2 - t1;
     if (matching_result == nullptr) {//如果失败了，直接返回
       // The range data has not been fully accumulated yet.
       return;
@@ -120,7 +120,7 @@ LOG_DEBUG << "扫描匹配耗时"<< t2 - t1;
           std::move(matching_result->range_data_in_local),
           std::move(insertion_result));
     }
-    LOG_DEBUG << "扫描匹配耗时"<< gomros::common::GetCurrentTime_us() - t2;
+    // LOG_DEBUG << "扫描匹配耗时"<< gomros::common::GetCurrentTime_us() - t2;
   }
 
   // imu数据的处理(相比于雷达数据的处理，其他的数据做的主要是数据转发的工作)

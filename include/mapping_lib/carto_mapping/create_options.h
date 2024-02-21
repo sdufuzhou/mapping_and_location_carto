@@ -4,14 +4,10 @@
 #include "cartographer/mapping/proto/map_builder_options.pb.h"
 #include "cartographer/mapping/proto/trajectory_builder_options.pb.h"
 #include "include/config_struct.h"
-
-// map_builder_interface.h又包含上面两个文件
 namespace gomros {
 namespace data_process {
 namespace mapping_and_location {
-// using LocalTrajectoryBuilderOptions2D =
-//     ::cartographer::mapping::proto::LocalTrajectoryBuilderOptions2D;
-// using PoseGraphOptions = ::cartographer::mapping::proto::PoseGraphOptions;
+
 using namespace ::cartographer::mapping::proto;
 using namespace ::cartographer::sensor::proto;
 using namespace ::cartographer::mapping::scan_matching::proto;

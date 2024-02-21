@@ -53,7 +53,7 @@ typedef struct AdaptiveVoxelFilterConfig {
 } AdaptiveVoxelFilterConfig;
 
 typedef struct LoopClosureAdaptiveVoxelFilterConfig {
-  float max_length;      // 0.9,
+  float max_length;      // 0.9
   float min_num_points;  // 100,
   float max_range;       // 50.,
 } LoopClosureAdaptiveVoxelFilterConfig;
@@ -74,6 +74,7 @@ typedef struct CeresSolverConfig {
 // 1.4 -- ceres匹配的一些配置参数
 typedef struct CeresScanMatcherConfig {
   double occupied_space_weight;  // 1.,
+  
   double translation_weight;     // 10.,
   double rotation_weight;        // 40.,
   // CeresSolverConfig
@@ -221,7 +222,6 @@ typedef struct TrajectoryBuilderConfig {
 typedef struct CartoMappingConfig {
   // 前端
   int mapping_pattern;  // 工程文件中用int类型，后面进行强制类型转换
-  //--------------新加--------------
   int mapping_start_angle;
   int mapping_end_angle;
   float mapping_resolution;
@@ -288,9 +288,9 @@ typedef struct MappingAndLocationConfig {
   int log_level;                            // 日志等级
   bool is_printf_to_terminal;               // 是否将日志输出到终端
   MappingAlgorithm mapping_algorithm;  // 建图算法，0为carto，1为karto
-  KartoMappingConfig karto_config;
-  CartoMappingConfig carto_config;  // Carto算法建图配置参数
-  GridLocationConfig location_config;  // 机器人建图前的栅格定位参数配置
+  KartoMappingConfig karto_config;    //Karto算法建图配置参数
+  CartoMappingConfig carto_config;    //Carto算法建图配置参数
+  GridLocationConfig location_config;  //机器人建图前的栅格定位参数配置
 } MappingAndLocationConfig;
 }  // namespace mapping_and_location
 }  // namespace data_process
